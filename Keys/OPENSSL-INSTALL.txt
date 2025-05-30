@@ -1,0 +1,12 @@
+1. Installa OpenSSL con winget
+Apri PowerShell come amministratore e lancia:
+
+winget install --id ShiningLight.OpenSSL.Light --source winget
+
+
+2. Aggiungi OpenSSL al PATH di sistema
+Esegui questo comando PowerShell come amministratore (modifica il percorso se hai una versione diversa):
+
+$opensslPath = "C:\Program Files\OpenSSL-Win64\bin"
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$opensslPath", [EnvironmentVariableTarget]::Machine)
+Write-Host "OpenSSL aggiunto al PATH di sistema. Riavvia PowerShell/cmd per rendere effettiva la modifica."
