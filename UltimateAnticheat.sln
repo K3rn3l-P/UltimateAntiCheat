@@ -5,7 +5,7 @@ VisualStudioVersion = 17.7.34003.232
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UltimateAnticheat", "UltimateAnticheat.vcxproj", "{344D69C4-3DE6-4D23-8FAF-66D8DC95CD9C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UltimateAntiCheat-Server", "..\UltimateAntiCheat-Server\UltimateAntiCheat-Server.csproj", "{EFA44162-ABE1-4C87-BC31-DA310D5B52F9}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UltimateAntiCheat-Server", "UltimateAntiCheat-Server\UltimateAntiCheat-Server.csproj", "{EFA44162-ABE1-4C87-BC31-DA310D5B52F9}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

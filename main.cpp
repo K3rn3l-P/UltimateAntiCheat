@@ -307,7 +307,7 @@ int main(int argc, char** argv)
     Thread* t = new Thread((LPTHREAD_START_ROUTINE)Splash::InitializeSplash, 0, false, true);
 
     cout << "*----------------------------------------------------------------------------------------*\n";
-    cout << "|                           Welcome to Duff Anti-Cheat (DAC)!                        |\n";
+    cout << "|                           Welcome to Duff Anti-Cheat (DAC)!                            |\n";
     cout << "|    An in-development, non-commercial AC made to help teach concepts in game security   |\n";
     cout << "|                              Made by k3rn3l @Github                                    |\n";
     cout << "|         ...With special thanks to:                                                     |\n";
