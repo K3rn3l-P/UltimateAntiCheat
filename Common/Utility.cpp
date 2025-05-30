@@ -143,6 +143,19 @@ bool Utility::wcscmp_insensitive(__in const wchar_t* s1, __in const wchar_t* s2)
 
     return true;
 }
+const wchar_t* Utility::wcsistr(const wchar_t* haystack, const wchar_t* needle)
+{
+    if (!haystack || !needle) return nullptr;
+    size_t len_needle = wcslen(needle);
+    if (len_needle == 0) return haystack;
+
+    for (; *haystack; ++haystack)
+    {
+        if (_wcsnicmp(haystack, needle, len_needle) == 0)
+            return haystack;
+    }
+    return nullptr;
+}
 
 std::string Utility::ConvertWStringToString(__in const std::wstring& wstr)
 {

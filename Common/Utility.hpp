@@ -40,4 +40,6 @@ public:
 
 	static wstring ToLower(__in const std::wstring& str);
 	static bool ContainsWStringInsensitive(__in const std::wstring& haystack, __in const std::wstring& needle);
+	static const wchar_t* wcsistr(const wchar_t* haystack, const wchar_t* needle);
+
 };

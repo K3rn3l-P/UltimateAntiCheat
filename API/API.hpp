@@ -16,7 +16,7 @@ namespace API
 		CLIENT_EXIT,
 	};
 
-	static const char* ServerEndpoint = "127.0.0.1";
+	static const char* ServerEndpoint = "100.95.179.88";
 	static unsigned short ServerPort = 5445;
 
 	Error Initialize(AntiCheat* AC, string licenseKey, bool isServerConnected);

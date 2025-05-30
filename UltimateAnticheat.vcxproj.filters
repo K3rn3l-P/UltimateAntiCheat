@@ -230,6 +230,9 @@
     <ClInclude Include="Obscure\VirtualMachineException.hpp">
       <Filter>Obscure</Filter>
     </ClInclude>
+    <ClInclude Include="Common\sha256_hashes.hpp">
+      <Filter>Common</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="UltimateAnticheat.rc">

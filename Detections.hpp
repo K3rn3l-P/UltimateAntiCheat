@@ -98,6 +98,8 @@ public:
 
 private:
 
+	std::vector<std::wstring> BlacklistedKeywords;
+
 	Settings* Config = nullptr; //non-owning pointer to the original unique_ptr<Settings> in main.cpp
 
 	PVOID DllCallbackRegistrationCookie = nullptr; //for dll notifications

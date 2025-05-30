@@ -569,7 +569,7 @@ bool Detections::IsBlacklistedProcessRunning() const
     bool foundBlacklistedProcess = false;
 
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnapshot == INVALID_HANDLE_VALUE) 
+    if (hSnapshot == INVALID_HANDLE_VALUE)
     {
         Logger::logf(Err, "Failed to create snapshot of processes. Error code: %d @ Detections::IsBlacklistedProcessRunning\n", GetLastError());
         return false;
@@ -577,19 +577,32 @@ bool Detections::IsBlacklistedProcessRunning() const
 
     PROCESSENTRY32 pe32;
     pe32.dwSize = sizeof(PROCESSENTRY32);
-    if (!Process32First(hSnapshot, &pe32)) 
+    if (!Process32First(hSnapshot, &pe32))
     {
         Logger::logf(Err, "Failed to get first process. Error code:  %d @ Detections::IsBlacklistedProcessRunning\n", GetLastError());
         CloseHandle(hSnapshot);
         return false;
     }
 
-    do 
+    do
     {
-        for (wstring blacklisted : BlacklistedProcesses)
+        std::wstring processName = pe32.szExeFile;
+        // Controllo nome esatto
+        for (const auto& blacklisted : BlacklistedProcesses)
         {
-            if (Utility::wcscmp_insensitive(blacklisted.c_str(), pe32.szExeFile))
+            if (Utility::wcscmp_insensitive(blacklisted.c_str(), processName.c_str()))
             {
+                Logger::logfw(Detection, L"[BLACKLIST] Processo blacklisted rilevato: %s", processName.c_str());
+                foundBlacklistedProcess = true;
+                break;
+            }
+        }
+        // Controllo parole chiave
+        for (const auto& keyword : BlacklistedKeywords)
+        {
+            if (Utility::wcsistr(processName.c_str(), keyword.c_str()) != nullptr)
+            {
+                Logger::logfw(Detection, L"[BLACKLIST] Processo con parola chiave sospetta '%s': %s", keyword.c_str(), processName.c_str());
                 foundBlacklistedProcess = true;
                 break;
             }
@@ -599,6 +612,7 @@ bool Detections::IsBlacklistedProcessRunning() const
     CloseHandle(hSnapshot);
     return foundBlacklistedProcess;
 }
+
 
 /*
 *   DoesFunctionAppearHooked - Checks if first bytes of a routine are a jump or call. Please make sure the function you use with this doesnt normally start with a jump or call.
@@ -734,6 +748,9 @@ UINT64 Detections::IsTextSectionWritable()
     CheckOpenHandles - Checks if any processes have open handles to our process, excluding whitelisted processes such as conhost.exe
     returns true if some other process has an open process handle to the current process
 */
+
+// DISABILITATO per test ed errori parental per l'updater.. SOLO TEST (ANCHE IN API.cpp)
+/*
 bool Detections::CheckOpenHandles()
 {
     bool foundHandle = false;
@@ -751,6 +768,68 @@ bool Detections::CheckOpenHandles()
                 if (wcscmp(Handles::Whitelisted[i], procName.c_str()) == 0) //whitelisted program has open handle
                 {
                     goto inner_break; //break out of inner for() loop without triggering foundHandle=true
+                }
+            }
+
+            Logger::logfw(Detection, L"Process %s has open process handle to our process.", procName.c_str());
+            foundHandle = true;
+
+        inner_break:
+            continue;
+        }
+    }
+
+    return foundHandle;
+}
+*/
+// ABILITATO SOLO per test ed errori parental per l'updater.. SOLO TEST (ANCHE IN API.cpp)
+bool Detections::CheckOpenHandles()
+{
+    bool foundHandle = false;
+    vector<Handles::_SYSTEM_HANDLE> handles = Handles::DetectOpenHandlesToProcess();
+
+    // Whitelist di processi di sistema Windows
+    const std::vector<std::wstring> systemWhitelisted = {
+        L"svchost.exe",
+        L"lsass.exe",
+        L"csrss.exe",
+        L"wininit.exe",
+        L"services.exe",
+        L"winlogon.exe",
+        L"explorer.exe",
+        L"conhost.exe"
+    };
+
+    DWORD parentPid = Process::GetParentProcessId();
+
+    for (auto& handle : handles)
+    {
+        if (Handles::DoesProcessHaveOpenHandleToUs(handle.ProcessId, handles))
+        {
+            if (handle.ProcessId == parentPid) {
+                continue;
+            }
+
+            wstring procName = Process::GetProcessName(handle.ProcessId);
+
+            // Escludi i processi di sistema
+            bool isSystem = false;
+            for (const auto& sysProc : systemWhitelisted) {
+                if (_wcsicmp(procName.c_str(), sysProc.c_str()) == 0) {
+                    isSystem = true;
+                    break;
+                }
+            }
+            if (isSystem) {
+                continue;
+            }
+
+            int size = sizeof(Handles::Whitelisted) / sizeof(UINT64);
+            for (int i = 0; i < size; i++)
+            {
+                if (wcscmp(Handles::Whitelisted[i], procName.c_str()) == 0)
+                {
+                    goto inner_break;
                 }
             }
 
@@ -1001,16 +1080,171 @@ void Detections::MonitorProcessCreation(__in LPVOID thisPtr)
     InitializeBlacklistedProcessesList - add static list of blacklisted process names to our Detections object
     ...we should also scan for window class names, possible exported functions (in any DLLs running in those programs), etc.
     Most people will of course just rename any common cheat tool names, much better to use byte scanning 
+
+    // DOPO
+    void Detections::InitializeBlacklistedProcessesList()
+{
+    // Cheat Engine e varianti
+    BlacklistedProcesses.push_back(L"cheat engine.exe");
+    BlacklistedProcesses.push_back(L"cheatengine.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-x86_64.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-x86_64-sse4-avx2.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-i386.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-x86.exe");
+
+    // Debugger
+    BlacklistedProcesses.push_back(L"ollydbg.exe");
+    BlacklistedProcesses.push_back(L"x64dbg.exe");
+    BlacklistedProcesses.push_back(L"x32dbg.exe");
+    BlacklistedProcesses.push_back(L"windbg.exe");
+    BlacklistedProcesses.push_back(L"ida.exe");
+    BlacklistedProcesses.push_back(L"ida64.exe");
+    BlacklistedProcesses.push_back(L"idaq.exe");
+    BlacklistedProcesses.push_back(L"idaq64.exe");
+    BlacklistedProcesses.push_back(L"scylla.exe");
+    BlacklistedProcesses.push_back(L"scylla_x64.exe");
+    BlacklistedProcesses.push_back(L"scylla_x86.exe");
+
+    // Process explorer e simili
+    BlacklistedProcesses.push_back(L"procexp.exe");
+    BlacklistedProcesses.push_back(L"procexp64.exe");
+    BlacklistedProcesses.push_back(L"processhacker.exe");
+    BlacklistedProcesses.push_back(L"processhacker-2.39.exe");
+    BlacklistedProcesses.push_back(L"processhacker-2.38.exe");
+    BlacklistedProcesses.push_back(L"processhacker-2.37.exe");
+
+    // Memory editor
+    BlacklistedProcesses.push_back(L"artmoney.exe");
+    BlacklistedProcesses.push_back(L"artmoney64.exe");
+    BlacklistedProcesses.push_back(L"winhex.exe");
+    BlacklistedProcesses.push_back(L"reclass.net.exe");
+    BlacklistedProcesses.push_back(L"reclass64.exe");
+    BlacklistedProcesses.push_back(L"reclass.exe");
+
+    // Dumper e unpacker
+    BlacklistedProcesses.push_back(L"megadumper.exe");
+    BlacklistedProcesses.push_back(L"extremedumper.exe");
+    BlacklistedProcesses.push_back(L"lordpe.exe");
+    BlacklistedProcesses.push_back(L"pe-bear.exe");
+
+    // Altri tool noti
+    BlacklistedProcesses.push_back(L"dbgview.exe");
+    BlacklistedProcesses.push_back(L"reshacker.exe");
+    BlacklistedProcesses.push_back(L"tcpview.exe");
+    BlacklistedProcesses.push_back(L"vmware.exe");
+    BlacklistedProcesses.push_back(L"vmware-vmx.exe");
+    BlacklistedProcesses.push_back(L"vmware-authd.exe");
+    BlacklistedProcesses.push_back(L"vmware-hostd.exe");
+    BlacklistedProcesses.push_back(L"vboxservice.exe");
+    BlacklistedProcesses.push_back(L"vboxtray.exe");
+    BlacklistedProcesses.push_back(L"vboxheadless.exe");
+    BlacklistedProcesses.push_back(L"vboxmanage.exe");
+    BlacklistedProcesses.push_back(L"vboxsdl.exe");
+    BlacklistedProcesses.push_back(L"vboxbugreport.exe");
+    BlacklistedProcesses.push_back(L"vboximg-mount.exe");
+    BlacklistedProcesses.push_back(L"vboximg.exe");
+
+    std::vector<std::wstring> BlacklistedKeywords = {
+    L"cheat", L"hack", L"debug", L"trainer", L"inject", L"bypass", L"crack"
+    };
+
+}
+
+FINE
+
+// E nel ciclo di controllo processi (IsBlacklistedProcessRunning):
+
+do
+{
+    std::wstring processName = pe32.szExeFile;
+    for (const auto& blacklisted : BlacklistedProcesses)
+    {
+        if (Utility::wcscmp_insensitive(blacklisted.c_str(), processName.c_str()))
+        {
+            foundBlacklistedProcess = true;
+            break;
+        }
+    }
+    // Controllo per parole chiave
+    for (const auto& keyword : BlacklistedKeywords)
+    {
+        if (processName.npos != Utility::wcsistr(processName.c_str(), keyword.c_str()))
+        {
+            foundBlacklistedProcess = true;
+            break;
+        }
+    }
+} while (Process32Next(hSnapshot, &pe32));
+
 */
 void Detections::InitializeBlacklistedProcessesList()
 {
-    this->BlacklistedProcesses.push_back(L"Cheat Engine.exe");
-    this->BlacklistedProcesses.push_back(L"CheatEngine.exe"); 
-    this->BlacklistedProcesses.push_back(L"cheatengine-x86_64-SSE4-AVX2.exe");
-    this->BlacklistedProcesses.push_back(L"x64dbg.exe");
-    this->BlacklistedProcesses.push_back(L"windbg.exe");
-    this->BlacklistedProcesses.push_back(L"DSEFix.exe");
+    // Cheat Engine e varianti
+    BlacklistedProcesses.push_back(L"cheat engine.exe");
+    BlacklistedProcesses.push_back(L"cheatengine.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-x86_64.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-x86_64-sse4-avx2.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-i386.exe");
+    BlacklistedProcesses.push_back(L"cheatengine-x86.exe");
+
+    // Debugger
+    BlacklistedProcesses.push_back(L"ollydbg.exe");
+    BlacklistedProcesses.push_back(L"x64dbg.exe");
+    BlacklistedProcesses.push_back(L"x32dbg.exe");
+    BlacklistedProcesses.push_back(L"windbg.exe");
+    BlacklistedProcesses.push_back(L"ida.exe");
+    BlacklistedProcesses.push_back(L"ida64.exe");
+    BlacklistedProcesses.push_back(L"idaq.exe");
+    BlacklistedProcesses.push_back(L"idaq64.exe");
+    BlacklistedProcesses.push_back(L"scylla.exe");
+    BlacklistedProcesses.push_back(L"scylla_x64.exe");
+    BlacklistedProcesses.push_back(L"scylla_x86.exe");
+
+    // Process explorer e simili
+    BlacklistedProcesses.push_back(L"procexp.exe");
+    BlacklistedProcesses.push_back(L"procexp64.exe");
+    BlacklistedProcesses.push_back(L"processhacker.exe");
+    BlacklistedProcesses.push_back(L"processhacker-2.39.exe");
+    BlacklistedProcesses.push_back(L"processhacker-2.38.exe");
+    BlacklistedProcesses.push_back(L"processhacker-2.37.exe");
+
+    // Memory editor
+    BlacklistedProcesses.push_back(L"artmoney.exe");
+    BlacklistedProcesses.push_back(L"artmoney64.exe");
+    BlacklistedProcesses.push_back(L"winhex.exe");
+    BlacklistedProcesses.push_back(L"reclass.net.exe");
+    BlacklistedProcesses.push_back(L"reclass64.exe");
+    BlacklistedProcesses.push_back(L"reclass.exe");
+
+    // Dumper e unpacker
+    BlacklistedProcesses.push_back(L"megadumper.exe");
+    BlacklistedProcesses.push_back(L"extremedumper.exe");
+    BlacklistedProcesses.push_back(L"lordpe.exe");
+    BlacklistedProcesses.push_back(L"pe-bear.exe");
+
+    // Altri tool noti
+    BlacklistedProcesses.push_back(L"dbgview.exe");
+    BlacklistedProcesses.push_back(L"reshacker.exe");
+    BlacklistedProcesses.push_back(L"tcpview.exe");
+    BlacklistedProcesses.push_back(L"vmware.exe");
+    BlacklistedProcesses.push_back(L"vmware-vmx.exe");
+    BlacklistedProcesses.push_back(L"vmware-authd.exe");
+    BlacklistedProcesses.push_back(L"vmware-hostd.exe");
+    BlacklistedProcesses.push_back(L"vboxservice.exe");
+    BlacklistedProcesses.push_back(L"vboxtray.exe");
+    BlacklistedProcesses.push_back(L"vboxheadless.exe");
+    BlacklistedProcesses.push_back(L"vboxmanage.exe");
+    BlacklistedProcesses.push_back(L"vboxsdl.exe");
+    BlacklistedProcesses.push_back(L"vboxbugreport.exe");
+    BlacklistedProcesses.push_back(L"vboximg-mount.exe");
+    BlacklistedProcesses.push_back(L"vboximg.exe");
+
+    // Parole chiave sospette
+    BlacklistedKeywords = {
+        L"cheat", L"hack", L"debug", L"trainer", L"inject", L"bypass", L"crack"
+    };
 }
+
 
 /*
     FindBlacklistedProgramsThroughByteScan(DWORD pid) - check process `pid` for specific byte patterns which implicate it of possibly being a bad actor process

@@ -1,4 +1,4 @@
-/*  
+﻿/*  
     U.A.C. is a non-invasive usermode anticheat for x64 Windows, tested on Windows 10 & 11. Usermode is used to ensure an optimal end user experience. It also provides insight into how many kernelmode attack methods can be prevented from usermode, through concepts such as secure boot enforcement and DSE checking.
     
     Please view the readme for more information regarding program features. If you'd like to use this project in your game/software, please contact the author.
@@ -13,10 +13,123 @@
 #include "SplashScreen.hpp"
 #include "AntiTamper/MapProtectedClass.hpp" //to make Settings class object write-protected (see https://github.com/AlSch092/RemapProtectedClass)
 #include "Obscure/XorStr.hpp"
+#include <locale>
+#include <codecvt>
+#include <conio.h>
+#include <tlhelp32.h>
+#include <windows.h>
+#include <set>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include "Common/SHA256.hpp"
+#include "Common/sha256_hashes.hpp" // inserisci subito dopo gli altri include
+#include "Network/NetClient.hpp"
+#include <memory>
+
+// Usa direttamente le costanti importate
+// const std::string expectedUpdaterSha256 = ... // RIMUOVI queste righe
+// const std::string expectedDuffDllSha256 = ...
+// const std::string expectedX32Sha256 = ...
+
+
+std::string CalculateFileSHA256(const std::wstring& filePath) {
+    std::ifstream file(filePath, std::ios::binary);
+    if (!file)
+        return "";
+
+    SHA256 sha;
+    std::vector<uint8_t> buffer(4096);
+    while (file) {
+        file.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
+        std::streamsize bytesRead = file.gcount();
+        if (bytesRead > 0)
+            sha.update(buffer.data(), static_cast<size_t>(bytesRead));
+    }
+    uint8_t* digest = sha.digest();
+    std::ostringstream oss;
+    for (int i = 0; i < 32; ++i)
+        oss << std::hex << std::setw(2) << std::setfill('0') << (int)digest[i];
+    delete[] digest;
+    return oss.str();
+}
+
+bool VerifySelfChecksum(const std::wstring& filePath, const std::string& expectedSha256) {
+    std::string actual = CalculateFileSHA256(filePath);
+    return _stricmp(actual.c_str(), expectedSha256.c_str()) == 0;
+}
+// PER ORA COMMENTA PER DEBUG!
+/* 
+bool CheckRootFolderIntegrity(const std::wstring& rootPath) {
+    // Elenco dei file e cartelle obbligatori (senza game.log)
+    const std::set<std::wstring> expected = {
+        L"Commands.txt", L"CONFIG.exe", L"CONFIG.INI", L"data.saf", L"data.sah", L"duff.dll", L"dxgi.dll",
+        L"game.exe", L"gsConfig.cfg", L"ijl15.dll", L"Log.txt", L"notice.txt", L"reshade-shaders.7z", L"public.der",
+        L"ReShade.ini", L"ReShade.log", L"ReShade.log1", L"ReShadePreset.ini", L"splash.png", L"tip.txt", L"proxy.log",
+        L"Updater.exe", L"Version.ini", L"x32.exe", L"libcurl-d.dll", L"zlibd1.dll", L"reshade-shaders", L"SCREENSHOT"
+    };
+
+    // File opzionali che possono esserci o meno
+    const std::set<std::wstring> optional = {
+        L"game.log"
+    };
+
+    // Cartelle che possono contenere file dinamici e NON vanno controllate nel loro interno
+    const std::set<std::wstring> allowedDirsWithDynamicContent = {
+        L"reshade-shaders", L"SCREENSHOT"
+    };
+
+    std::set<std::wstring> found;
+
+    std::wstring searchPath = rootPath + L"\\*";
+    WIN32_FIND_DATAW ffd;
+    HANDLE hFind = FindFirstFileW(searchPath.c_str(), &ffd);
+
+    if (hFind == INVALID_HANDLE_VALUE)
+        return false;
+
+    do {
+        std::wstring name = ffd.cFileName;
+        if (name == L"." || name == L"..")
+            continue;
+        found.insert(name);
+    } while (FindNextFileW(hFind, &ffd) != 0);
+
+    FindClose(hFind);
+
+    // Controlla che non ci siano file/cartelle non attesi (escludendo quelli opzionali)
+    for (const auto& f : found) {
+        if (expected.find(f) == expected.end() && optional.find(f) == optional.end()) {
+            std::wcerr << L"[ERRORE] File/cartella non atteso: " << f << std::endl;
+            return false;
+        }
+    }
+    // Controlla che tutti i file obbligatori siano presenti
+    for (const auto& f : expected) {
+        if (found.find(f) == found.end()) {
+            std::wcerr << L"[ERRORE] File/cartella mancante: " << f << std::endl;
+            return false;
+        }
+    }
+    return true;
+}*/
+
 
 #pragma comment(linker, "/ALIGN:0x10000") //for remapping technique (anti-tamper) - each section gets its own region, align with system allocation granularity
 #pragma comment (linker, "/INCLUDE:_tls_used")
 #pragma comment (linker, "/INCLUDE:_tls_callback")
+
+HANDLE CreateKillOnCloseJob()
+{
+    HANDLE hJob = CreateJobObjectW(NULL, NULL);
+    if (hJob == NULL)
+        return NULL;
+
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli = { 0 };
+    jeli.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+    return hJob;
+}
 
 using namespace std;
 
@@ -34,21 +147,86 @@ PIMAGE_TLS_CALLBACK _tls_callback = TLSCallback;
 
 Settings* Settings::Instance = nullptr; //singleton-style instance of Settings class, which will be made write-protected via ProtectedMemory class
 
+void TerminateOtherGameInstances(DWORD currentPid) {
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE)
+        return;
+
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    if (Process32First(hSnapshot, &pe32)) {
+        do {
+            if (_wcsicmp(pe32.szExeFile, L"x32.exe") == 0 && pe32.th32ProcessID != currentPid) {
+                HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe32.th32ProcessID);
+                if (hProc) {
+                    TerminateProcess(hProc, 1);
+                    CloseHandle(hProc);
+                }
+            }
+        } while (Process32Next(hSnapshot, &pe32));
+    }
+    CloseHandle(hSnapshot);
+}
+
 bool SupressingNewThreads = true; //we need some variables in both our TLS callback and main()
 
-LONG WINAPI g_ExceptionHandler(__in EXCEPTION_POINTERS* ExceptionInfo);
+LONG WINAPI g_ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo);
 
 int main(int argc, char** argv)
 {
 	std::string userKeyboardInput; //for looping until user wants to exit
+
+    std::wstring rootPath = L".";
+	// Controllo integrità della cartella root (commentato per debug)
+   /* if (!CheckRootFolderIntegrity(rootPath)) {
+        std::wcerr << L"[ERRORE] Integrità della cartella root fallita. L'applicazione verrà chiusa." << std::endl;
+        ExitProcess(1);
+    }*/
+    // FINE: Controllo integrità della cartella root (commentato per debug)
+    
+    // Updater: script per SHA256
+    /*param(
+        [string]$FilePath = "Updater.exe"
+    )
+
+    if (-Not (Test-Path $FilePath)) {
+        Write-Error "File non trovato: $FilePath"
+        exit 1
+    }
+
+    # Calcola SHA-256
+    $hash = Get-FileHash -Path $FilePath -Algorithm SHA256
+
+    # Copia negli appunti solo l'hash
+    $hash.Hash | Set-Clipboard
+
+    # Output di conferma
+    Write-Host "SHA-256 hash per '$FilePath': $($hash.Hash)"
+    Write-Host "L'hash è stato copiato negli appunti."
+    pause
+    */ //FINE
+    // Controllo SHA256 Updater.exe
+    std::wstring updaterPath = L".\\Updater.exe";
+    if (!VerifySelfChecksum(updaterPath, expectedUpdaterSha256)) {
+        std::wcerr << L"[ERRORE] Updater.exe non valido! SHA256 mismatch. L'applicazione verrà chiusa." << std::endl;
+        ExitProcess(1);
+    }
+
+    // SHA256 atteso di duff.dll (sostituisci con quello reale)
+    std::wstring duffDllPath = L".\\duff.dll";
+    if (!VerifySelfChecksum(duffDllPath, expectedDuffDllSha256)) {
+        std::wcerr << L"[ERRORE] duff.dll non valido! SHA256 mismatch. L'applicazione verrà chiusa." << std::endl;
+        ExitProcess(1);
+    }
 
     std::unordered_map<DetectionFlags, const char*> explanations;
     std::list<DetectionFlags> flags; //for explanation output after the program is finished running
 
     // Set default options
 #ifdef _DEBUG //in debug compilation, we are more lax with our protections for easier testing purposes
-    const bool bEnableNetworking = false;  //change this to false if you don't want to use the server
-    const bool bEnforceSecureBoot = true;
+    const bool bEnableNetworking = true;  //change this to false if you don't want to use the server
+    const bool bEnforceSecureBoot = false;
     const bool bEnforceDSE = true;
     const bool bEnforceNoKDBG = true;
     const bool bUseAntiDebugging = true;
@@ -59,11 +237,11 @@ int main(int argc, char** argv)
     const bool bUsingDriver = false; //signed driver for hybrid KM + UM anticheat. the KM driver will not be public, so make one yourself if you want to use this option  
     const bool bEnableLogging = true;
 
-    const std::list<std::wstring> allowedParents = {L"VsDebugConsole.exe", L"vsdbg.exe", L"powershell.exe", L"bash.exe", L"zsh.exe", L"explorer.exe"};
-    const std::string logFileName = "UltimateAnticheat.log";
+    const std::list<std::wstring> allowedParents = {L"VsDebugConsole.exe", L"vsdbg.exe", L"powershell.exe", L"bash.exe", L"zsh.exe", L"explorer.exe", L"x32.exe", L"Updater.exe" };
+    const std::string logFileName = "game.log";
 
 #else
-    const bool bEnableNetworking = false; //change this to false if you don't want to use the server
+    const bool bEnableNetworking = true; //change this to false if you don't want to use the server
     const bool bEnforceSecureBoot = false; //secure boot is recommended in distribution builds
     const bool bEnforceDSE = true;
     const bool bEnforceNoKDBG = true;
@@ -83,8 +261,20 @@ int main(int argc, char** argv)
     wchar_t decrypted_2[parent_2.getSize()] = {};
     parent_2.decrypt(decrypted_2);
 
-    const std::list<std::wstring> allowedParents = { decrypted_1, decrypted_2 }; //add your launcher here
-    const std::string logFileName = ""; //empty : does not log to file
+    constexpr auto parent_3 = make_encrypted(L"powershell.exe");
+    wchar_t decrypted_3[parent_3.getSize()] = {};
+    parent_3.decrypt(decrypted_3);
+
+    constexpr auto parent_4 = make_encrypted(L"x32.exe");
+    wchar_t decrypted_4[parent_4.getSize()] = {};
+    parent_4.decrypt(decrypted_4);
+
+    constexpr auto parent_5 = make_encrypted(L"Updater.exe");
+    wchar_t decrypted_5[parent_5.getSize()] = {};
+    parent_5.decrypt(decrypted_5);
+
+    const std::list<std::wstring> allowedParents = { decrypted_1, decrypted_2, decrypted_3, decrypted_4, decrypted_5 }; //add your launcher here
+    const std::string logFileName = "game.log"; //empty : does not log to file
 #endif
 
 #ifdef _DEBUG
@@ -112,17 +302,18 @@ int main(int argc, char** argv)
 
 #endif
 
-    SetConsoleTitle(L"Ultimate Anti-Cheat");
+    SetConsoleTitle(L"DAC");
 
     Thread* t = new Thread((LPTHREAD_START_ROUTINE)Splash::InitializeSplash, 0, false, true);
 
     cout << "*----------------------------------------------------------------------------------------*\n";
-    cout << "|                           Welcome to Ultimate Anti-Cheat (UAC)!                        |\n";
+    cout << "|                           Welcome to Duff Anti-Cheat (DAC)!                            |\n";
     cout << "|    An in-development, non-commercial AC made to help teach concepts in game security   |\n";
-    cout << "|                              Made by AlSch092 @Github                                  |\n";
+    cout << "|                              Made by k3rn3l @Github                                    |\n";
     cout << "|         ...With special thanks to:                                                     |\n";
-    cout << "|           changeofpace (remapping method)                                              |\n";
+    cout << "|           AlSch092                                                                     |\n";
     cout << "|           discriminating (dll load notifcations, catalog verification)                 |\n";
+    cout << "|           changeofpace (remapping method)                                              |\n";
     cout << "|           LucasParsy (testing, bug fixing)                                             |\n";
     cout << "*----------------------------------------------------------------------------------------*\n";
 
@@ -144,6 +335,58 @@ int main(int argc, char** argv)
         allowedParents, 
         bEnableLogging, 
         logFileName);
+   
+    // --- QUI INSERISCI IL BLOCCO DI INIZIALIZZAZIONE DEL NETCLIENT ---
+	
+
+    // ABILITATO SOLO per test ed errori parental per l'updater.. SOLO TEST (ANCHE IN Detections/API.cpp)
+    DWORD parentPid = 0;
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    PROCESSENTRY32W pe32 = { 0 };
+    pe32.dwSize = sizeof(PROCESSENTRY32W);
+    DWORD thisPid = GetCurrentProcessId();
+    std::wstring parentProcessName = L"";
+
+    if (Process32FirstW(hSnapshot, &pe32)) {
+        do {
+            if (pe32.th32ProcessID == thisPid) {
+                parentPid = pe32.th32ParentProcessID;
+                break;
+            }
+        } while (Process32NextW(hSnapshot, &pe32));
+    }
+    if (parentPid != 0) {
+        // Cerca il nome del parent process
+        pe32.dwSize = sizeof(PROCESSENTRY32W);
+        if (Process32FirstW(hSnapshot, &pe32)) {
+            do {
+                if (pe32.th32ProcessID == parentPid) {
+                    parentProcessName = pe32.szExeFile;
+                    break;
+                }
+            } while (Process32NextW(hSnapshot, &pe32));
+        }
+    }
+    CloseHandle(hSnapshot);
+
+    // Logga il nome del parent process
+    Logger::logf(Info, "Parent process name: '%ws' (PID: %lu)", parentProcessName.c_str(), parentPid);
+
+    // Controllo whitelist (case-insensitive)
+    bool isAllowed = false;
+    for (const auto& allowed : allowedParents) {
+        if (_wcsicmp(parentProcessName.c_str(), allowed.c_str()) == 0) {
+            isAllowed = true;
+            break;
+        }
+    }
+    if (!isAllowed) {
+        Logger::logf(Err, "Parent process '%ws' was not whitelisted, shutting down program!", parentProcessName.c_str());
+        return 1;
+    }
+
+    // ABILITATO SOLO per test ed errori parental per l'updater.. SOLO TEST (ANCHE IN Detections/API.cpp)
+    // --- FINE BLOCCO CONTROLLO PARENT PROCESS ---
 
     try
     {
@@ -152,7 +395,7 @@ int main(int argc, char** argv)
     catch (const std::runtime_error& ex)
     {
         Logger::logf(Err, "Settings could not be initialized. Closing application...");
-        goto Cleanup;
+        return 1;
     }
 
     try
@@ -162,12 +405,12 @@ int main(int argc, char** argv)
     catch (const std::bad_alloc& e)
     {
         Logger::logf(Err, "Anticheat pointer could not be allocated @ main(): %s", e.what());
-        goto Cleanup;
+        return 1;
     }
     catch (const AntiCheatInitFail& e)
     {
         Logger::logf(Err, "Anticheat init error: %d %s", e.reasonEnum, e.what());
-        goto Cleanup;
+        return 1;
     }
 
     if (Settings::Instance->bCheckThreads)
@@ -175,7 +418,7 @@ int main(int argc, char** argv)
         if (Anti_Cheat->IsAnyThreadSuspended()) //make sure that all our necessary threads aren't suspended by an attacker
         {
             Logger::logf(Detection, "Atleast one of our threads was found suspended! All threads must be running for proper module functionality.");
-            goto Cleanup;
+            return 1;
         }
     }
 
@@ -185,21 +428,157 @@ int main(int argc, char** argv)
     cout << "All protections have been deployed, the program will now loop using its detection methods. Thanks for your interest in the project!" << endl;
     cout << "Please enter 'q' if you'd like to end the program." << endl;
     
+    std::wstring exePath;
+    if (argc >= 2) {
+        exePath = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().from_bytes(argv[1]);
+    }
+    else {
+        exePath = L".\\x32.exe"; // Percorso relativo alla root Duff!_Client-v20
+        std::wcout << L"[INFO] Nessun argomento fornito, avvio gioco di default: " << exePath << std::endl;
+    }
+
+    // Gioco: script per SHA256
+    /*param(
+        [string]$FilePath = "x32.exe"
+    )
+
+    if (-Not (Test-Path $FilePath)) {
+        Write-Error "File non trovato: $FilePath"
+        exit 1
+    }
+
+    # Calcola SHA-256
+    $hash = Get-FileHash -Path $FilePath -Algorithm SHA256
+
+    # Copia negli appunti solo l'hash
+    $hash.Hash | Set-Clipboard
+
+    # Output di conferma
+    Write-Host "SHA-256 hash per '$FilePath': $($hash.Hash)"
+    Write-Host "L'hash è stato copiato negli appunti."
+    pause
+    */ //FINE
+    // GIOCO: SHA256 atteso di x32.exe (sostituisci con quello reale)
+    // Verifica integrità x32.exe
+    if (!VerifySelfChecksum(exePath, expectedX32Sha256)) {
+        std::wcerr << L"[ERRORE] x32.exe non valido! SHA256 mismatch. L'applicazione verrà chiusa." << std::endl;
+        ExitProcess(1);
+    }
+
+    STARTUPINFOW si = { sizeof(si) };
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&pi, sizeof(pi));
+    bool gameStarted = false;
+
+    std::wstring commandLine = exePath + L" A9v1o 2X5Z";
+
+    if (!exePath.empty()) {
+        if (!CreateProcessW(
+            nullptr,                // lpApplicationName: nullptr per usare commandLine
+            &commandLine[0],        // lpCommandLine: deve essere modificabile
+			nullptr, // lpProcessAttributes: nullptr per usare gli attributi di default
+			nullptr, // lpThreadAttributes: nullptr per usare gli attributi di default
+			FALSE, // bInheritHandles: FALSE per non ereditare gli handle
+			0, // dwCreationFlags: 0 per usare le impostazioni di default
+			nullptr, // lpEnvironment: nullptr per usare l'ambiente del processo chiamante
+			nullptr, // lpCurrentDirectory: nullptr per usare la directory corrente
+            &si,
+			&pi))  // Crea il processo
+        {
+            std::wcerr << L"[ERROR] Failed to launch game executable: " << exePath << L" (error: " << GetLastError() << L")\n";
+        }
+        else {
+            gameStarted = true;
+            std::wcout << L"[INFO] Successfully launched: " << exePath << std::endl;
+
+            // --- JOB OBJECT ---
+            HANDLE hJob = CreateKillOnCloseJob();
+            if (hJob && pi.hProcess) {
+                AssignProcessToJobObject(hJob, pi.hProcess);
+            }
+
+            TerminateOtherGameInstances(pi.dwProcessId);
+        }
+    }
+
+    DWORD lastCheck = GetTickCount();
+
     while (true)
     {
-        cin >> userKeyboardInput;
+        // Se il gioco è stato avviato, controlla se è ancora attivo
+        if (gameStarted && pi.hProcess) {
+            DWORD result = WaitForSingleObject(pi.hProcess, 0);
+            if (result == WAIT_OBJECT_0) {
+                std::cout << "[INFO] Il gioco è stato chiuso. DAC si chiude..." << std::endl;
+                break;
+            }
+        }
 
-        if (userKeyboardInput == "q" || userKeyboardInput == "Q")
+        // Ogni 2 secondi, termina eventuali altre istanze di x32.exe
+        if (gameStarted) {
+            if (GetTickCount() - lastCheck > 2000) {
+                TerminateOtherGameInstances(pi.dwProcessId);
+                lastCheck = GetTickCount();
+            }
+        }
+
+        if (Anti_Cheat->GetMonitor()->IsUserCheater())
         {
-            cout << "Exit key was pressed, shutting down program..." << endl;
-            break;
-        }     
+            Logger::logf(Err, "Cheating process detected! Terminating...");
+
+            // INVIA TUTTE LE DETECTION AL SERVER PRIMA DI TERMINARE
+            if (Anti_Cheat->GetMonitor()->GetEvidenceLog() != nullptr)
+            {
+                Anti_Cheat->GetMonitor()->GetEvidenceLog()->PushAllEvidence();
+                // Attendi brevemente per garantire l'invio
+                Sleep(200);
+            }
+
+            if (gameStarted && pi.hProcess) {
+                TerminateProcess(pi.hProcess, 1);
+            }
+            ExitProcess(1);
+        }
+
+
+        if (_kbhit()) {
+            std::cin >> userKeyboardInput;
+            if (userKeyboardInput == "q" || userKeyboardInput == "Q")
+            {
+                std::cout << "Exit key was pressed, shutting down program..." << std::endl;
+                break;
+            }
+        }
+
+        Sleep(100); // evita busy loop
+    }
+    // Prima del cleanup finale
+    if (Anti_Cheat) {
+        // Chiudi il thread di anti-debug
+        if (auto antiDbg = Anti_Cheat->GetAntiDebugger()) {
+            Thread* detectionThread = antiDbg->GetDetectionThread();
+            if (detectionThread) {
+                detectionThread->SignalShutdown(TRUE);
+                detectionThread->JoinThread();
+            }
+        }
+        // Chiudi altri thread se necessario (es. monitor)
+        // ...
+        // Chiudi la connessione di rete
+        if (!Anti_Cheat->GetNetworkClient().expired()) {
+            auto netClient = Anti_Cheat->GetNetworkClient().lock();
+            if (netClient) {
+                netClient->EndConnection(0);
+            }
+        }
+    }
+	// Se il gioco è stato avviato, attendi la chiusura del processo
+    // Cleanup finale
+    if (gameStarted) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
     }
 
-    if (Anti_Cheat->GetMonitor()->IsUserCheater())
-    {
-        Logger::logf(Info, "Detected a possible cheater during program execution!");
-    }
 
 #ifdef _DEBUG
 
@@ -238,12 +617,11 @@ int main(int argc, char** argv)
 #endif
 
 Cleanup:
-    if(t != nullptr)
+    if (t != nullptr)
         delete t;
 
-	Anti_Cheat.reset(); //we need to call AntiCheat's destructor before ~ProtectedMemory, since AntiCheat destructor will reference the Settings object
-
-    ProtectedSettingsMemory.~ProtectedMemory(); //we need to unmap the memory before 
+    Anti_Cheat.reset();
+    ProtectedSettingsMemory.~ProtectedMemory();
 
     return 0;
 }
@@ -374,4 +752,14 @@ LONG WINAPI g_ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo)  //handler tha
     } //optionally we may be able to view the exception address and compare it to whitelisted module address space, if it's not contained then we assume it's attacker-run code
 
     return EXCEPTION_CONTINUE_SEARCH;
+}
+
+// WinMain
+// Forward declaration
+int main(int argc, char** argv);
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nShowCmd)
+{
+    // Puoi parsare lpCmdLine se vuoi passare argomenti
+    return main(__argc, __argv);
 }
