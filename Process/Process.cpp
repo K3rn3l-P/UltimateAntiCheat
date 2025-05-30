@@ -9,6 +9,9 @@ wstring Process::ExecutableModuleNameW = wstring(_MAIN_MODULE_NAME_W); //store t
 */
 BOOL Process::CheckParentProcess(__in const wstring desiredParent, __in const bool bShouldCheckSignature)
 {
+    // ABILITATO SOLO per test ed errori parental per l'updater.. SOLO TEST (ANCHE IN Detections/API.cpp)
+    Logger::logfw(Info, L"CheckParentProcess chiamato con: '%ws'", desiredParent.c_str());
+
     std::list<DWORD> pids = GetProcessIdsByName(desiredParent);
     DWORD parentPid = GetParentProcessId();
     

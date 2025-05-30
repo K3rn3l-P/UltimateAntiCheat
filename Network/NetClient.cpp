@@ -1,5 +1,11 @@
 //By AlSch092 @github
 #include "NetClient.hpp"
+#include <vector>
+#include <fstream>
+#include <windows.h>
+#include <wincrypt.h>
+#pragma comment(lib, "bcrypt.lib")
+
 
 /*
 	Initialize - Initializes the network client
@@ -78,14 +84,13 @@ Error NetClient::EndConnection(__in const int reason)
 	Error err = Error::OK;
 
 	if (this->Socket != SOCKET_ERROR)
-	{
-		//send CS_GOODBYE then disconnect
+{
+    if (this->SendData(p) != Error::OK)
+        err = Error::CANT_SEND;
 
-		if (this->SendData(p) != Error::OK)
-		{
-			err = Error::CANT_SEND;
-		}
-	}
+    shutdown(this->Socket, SD_SEND);
+    Sleep(200); // Attendi che il pacchetto venga trasmesso
+}
 
 	if (Socket != SOCKET_ERROR && Socket != NULL)
 	{
@@ -164,16 +169,13 @@ void NetClient::ProcessRequests(__in LPVOID Param)
 	while (receiving)
 	{
 		if (Client->GetRecvThread()->IsShutdownSignalled())
-		{
 			goto end;
-		}
 
 		SOCKET s = Client->GetClientSocket();
 
 		if (s)
 		{
 			int bytesIn = 0;
-
 			{
 				std::lock_guard<std::mutex> lock(Client->RecvPacketMutex);
 				bytesIn = recv(s, (char*)recvBuf, DEFAULT_RECV_LENGTH, 0);
@@ -184,8 +186,9 @@ void NetClient::ProcessRequests(__in LPVOID Param)
 
 			if (bytesIn != SOCKET_ERROR)
 			{
-				Client->CipherData(recvBuf, bytesIn); //decrypt buffer
+				Client->CipherData(recvBuf, bytesIn);
 
+				
 				PacketReader* p = new PacketReader(recvBuf, bytesIn);
 				Client->HandleInboundPacket(p);
 				delete p;
@@ -193,10 +196,10 @@ void NetClient::ProcessRequests(__in LPVOID Param)
 			else
 				receiving = false;
 		}
-		else if(s == SOCKET_ERROR)
+		else if (s == SOCKET_ERROR)
 		{
 			Logger::logf(Err, "Socket error @  NetClient::ProcessRequests");
-			receiving = false; //todo: send signals to rest of anticheat to shutdown
+			receiving = false;
 		}
 
 		Sleep(ms_between_loops);
@@ -524,5 +527,15 @@ string NetClient::GetHardwareID()
 	else
 		HWID = "Failed to generate HWID.";
 
-	return HWID;
-}
+		return HWID;
+	}
+
+	// --- Qui inizia la definizione della nuova funzione ---
+	void NetClient::SendErrorAndExit(const std::string & errorMsg)
+	{
+		PacketWriter* p = new PacketWriter(9999);
+		p->WriteString(errorMsg);
+		this->SendData(p);
+		Sleep(100); // Attendi che il pacchetto venga inviato
+		ExitProcess(1);
+	}

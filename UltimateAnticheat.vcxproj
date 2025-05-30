@@ -80,11 +80,13 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <GenerateManifest>false</GenerateManifest>
+    <GenerateManifest>true</GenerateManifest>
+    <TargetName>game</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
-    <GenerateManifest>false</GenerateManifest>
+    <GenerateManifest>true</GenerateManifest>
+    <TargetName>game</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -128,7 +130,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions);_WIN32_WINNT=0x0A00;_MAIN_MODULE_NAME="UltimateAnticheat.exe";_MAIN_MODULE_NAME_W=L"UltimateAnticheat.exe"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;_DEBUG;_CONSOLE;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions);_WIN32_WINNT=0x0A00;_MAIN_MODULE_NAME="game.exe";_MAIN_MODULE_NAME_W=L"game.exe"</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <WholeProgramOptimization>false</WholeProgramOptimization>
@@ -138,11 +140,14 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;$(CoreLibraryDependencies);%(AdditionalDependencies); wintrust.lib; crypt32.lib;</AdditionalDependencies>
       <TreatLinkerWarningAsErrors>false</TreatLinkerWarningAsErrors>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
     <PostBuildEvent>
       <Command>copy "$(ProjectDir)\splash.png" "$(ProjectDir)\x64\Debug\splash.png" 
 copy "$(ProjectDir)\DLLs\libcurl-d.dll" "$(ProjectDir)\x64\Debug\libcurl-d.dll"
-copy "$(ProjectDir)\DLLs\zlibd1.dll" "$(ProjectDir)\x64\Debug\zlibd1.dll"</Command>
+copy "$(ProjectDir)\DLLs\zlibd1.dll" "$(ProjectDir)\x64\Debug\zlibd1.dll"
+powershell -ExecutionPolicy Bypass -File "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\script\sha256_hashes.ps1"
+</Command>
       <Message>Copy Splash Image</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -152,7 +157,7 @@ copy "$(ProjectDir)\DLLs\zlibd1.dll" "$(ProjectDir)\x64\Debug\zlibd1.dll"</Comma
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>false</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WIN32_WINNT=0x0A00;_MAIN_MODULE_NAME="UltimateAnticheat.exe";_MAIN_MODULE_NAME_W=L"UltimateAnticheat.exe"</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WIN32_WINNT=0x0A00;_MAIN_MODULE_NAME="game.exe";_MAIN_MODULE_NAME_W=L"game.exe"</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <BufferSecurityCheck>true</BufferSecurityCheck>
     </ClCompile>
@@ -162,11 +167,18 @@ copy "$(ProjectDir)\DLLs\zlibd1.dll" "$(ProjectDir)\x64\Debug\zlibd1.dll"</Comma
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>ntdll.lib;$(CoreLibraryDependencies);%(AdditionalDependencies); wintrust.lib; Crypt32.lib;</AdditionalDependencies>
+      <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(ProjectDir)\splash.png" "$(ProjectDir)\x64\Release\splash.png" </Command>
+      <Command>copy "$(ProjectDir)\splash.png" "$(ProjectDir)\x64\Release\splash.png"
+powershell -ExecutionPolicy Bypass -File "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\script\sha256_hashes.ps1"
+</Command>
       <Message>Copy Splash Image</Message>
     </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="AntiCheat.cpp" />
@@ -209,6 +221,7 @@ copy "$(ProjectDir)\DLLs\zlibd1.dll" "$(ProjectDir)\x64\Debug\zlibd1.dll"</Comma
     <ClInclude Include="Common\Logger.hpp" />
     <ClInclude Include="Common\Settings.hpp" />
     <ClInclude Include="Common\SHA256.hpp" />
+    <ClInclude Include="Common\sha256_hashes.hpp" />
     <ClInclude Include="Common\Utility.hpp" />
     <ClInclude Include="Detections.hpp" />
     <ClInclude Include="Environment\Services.hpp" />

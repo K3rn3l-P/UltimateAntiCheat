@@ -15,20 +15,27 @@ Error API::Initialize(AntiCheat* AC, string licenseKey, bool isServerAvailable)
 		return Error::NULL_MEMORY_REFERENCE;
 
 	std::list<wstring> allowedParents = AC->GetConfig()->allowedParents;
-	auto it = std::find_if(allowedParents.begin(), allowedParents.end(), [](const wstring& parentName) 
-	{
-		return Process::CheckParentProcess(parentName, true);
-	});
+	std::wstring realParentName = Process::GetProcessName(Process::GetParentProcessId());
+	Logger::logfw(Info, L"Parent process effettivo: '%ws'", realParentName.c_str());
 
-	if (it != allowedParents.end()) 
-	{
-		AC->GetMonitor()->GetProcessObj()->SetParentName(*it);
+	bool found = false;
+	for (const auto& allowed : allowedParents) {
+		if (_wcsicmp(realParentName.c_str(), allowed.c_str()) == 0) {
+			found = true;
+			break;
+		}
 	}
-	else //bad parent process detected, or parent process mismatch, shut down the program (and optionally report the error to the server)
-	{
-		Logger::logfw(Detection, L"Parent process '%s' was not whitelisted, shutting down program!", Process::GetProcessName(Process::GetParentProcessId()).c_str());
+	// INIZIO:Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
+	
+	if (found) {
+		AC->GetMonitor()->GetProcessObj()->SetParentName(realParentName);
+	}
+	else {
+		Logger::logfw(Detection, L"Parent process '%ws' was not whitelisted, shutting down program!", realParentName.c_str());
 		errorCode = Error::PARENT_PROCESS_MISMATCH;
 	}
+	
+	// FINE: Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
 
 	if (isServerAvailable)
 	{
@@ -142,12 +149,19 @@ Error API::LaunchDefenses(AntiCheat* AC) //currently in the process to split the
 
 	//AC->GetMonitor()->GetServiceManager()->GetServiceModules(); //enumerate services -> currently not in use
 
-	if (!Process::CheckParentProcess(AC->GetMonitor()->GetProcessObj()->GetParentName(), true)) //parent process check, the parent process would normally be set using our API methods
-	{
+	// INIZIO: Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
+	
+	std::wstring parentName = AC->GetMonitor()->GetProcessObj()->GetParentName();
+	bool requireSignature = true;
+	if (_wcsicmp(parentName.c_str(), L"Updater.exe") == 0) {
+		requireSignature = false;
+	}
+	if (!Process::CheckParentProcess(parentName, requireSignature)) {
 		Logger::logf(Detection, "Parent process was not in whitelist!");
 		errorCode = Error::PARENT_PROCESS_MISMATCH;
 	}
-
+	
+	// FINE: Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
 	return errorCode;
 }
 

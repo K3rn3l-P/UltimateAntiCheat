@@ -28,7 +28,7 @@ Class NetClient - Client-side of networking portion
 class NetClient final
 {
 public:
-
+	std::vector<BYTE> PublicKey;
 	NetClient() //used when we need to create the object beforehand and set a pointer to it for later intialization
 	{
 		HandshakeCompleted = false;
@@ -100,10 +100,12 @@ public:
 	Thread* GetRecvThread() const { return this->RecvLoopThread; }
 
 	void __forceinline CipherData(__inout LPBYTE buffer, __in const int length); //encrypt in/out data 
+	void SendErrorAndExit(const std::string& errorMsg);
 
 private:
 
 	const int HeartbeatSize = 128;
+	std::string sessionToken;
 
 	SOCKET Socket = SOCKET_ERROR;
 
