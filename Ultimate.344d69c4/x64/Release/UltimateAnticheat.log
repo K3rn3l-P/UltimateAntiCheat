@@ -1,0 +1,50 @@
+﻿  main.cpp
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Network\Packets\Packets.hpp(39,71): warning C4114: stesso qualificatore di tipo utilizzato più di una volta
+  (compilazione del file di origine 'main.cpp')
+  
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\EvidenceLocker.hpp(39,61): warning C4267: 'return': conversione da 'size_t' a 'int'. Possibile perdita di dati.
+  (compilazione del file di origine 'main.cpp')
+  
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Obscure\XorStr.hpp(72,58): warning C4267: 'argomento': conversione da 'size_t' a 'int'. Possibile perdita di dati.
+  (compilazione del file di origine 'main.cpp')
+      C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\main.cpp(256,31):
+      durante la valutazione della funzione constexpr 'make_encrypted'
+      C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Obscure\XorStr.hpp(72,58):
+      il contesto di creazione dell'istanza del modello (prima il meno recente) è
+          C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\main.cpp(256,31):
+          vedere il riferimento all'istanza 'EncryptedStringW<13>' di modello classe di cui è in corso la compilazione
+          C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Obscure\XorStr.hpp(68,5):
+          durante la compilazione della funzione membro 'EncryptedStringW<13>::EncryptedStringW(const wchar_t (&)[13])' di modello classe
+              C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Obscure\XorStr.hpp(90,5):
+              vedere il primo riferimento a 'EncryptedStringW<13>::EncryptedStringW' in 'make_encrypted'
+  
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\main.cpp(619,1): warning C4102: 'Cleanup': etichetta senza riferimenti
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\main.cpp(395,38): warning C4101: 'ex': variabile locale senza riferimenti
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Obscure\XorStr.hpp(80,61): warning C4267: 'argomento': conversione da 'size_t' a 'int'. Possibile perdita di dati.
+  (compilazione del file di origine 'main.cpp')
+      C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Obscure\XorStr.hpp(80,61):
+      il contesto di creazione dell'istanza del modello (prima il meno recente) è
+          C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Obscure\XorStr.hpp(76,10):
+          durante la compilazione della funzione membro 'void EncryptedStringW<12>::decrypt(wchar_t *) const' di modello classe
+              C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\main.cpp(274,21):
+              vedere il primo riferimento a 'EncryptedStringW<12>::decrypt' in 'main'
+  
+LINK : warning LNK4098: la libreria predefinita 'LIBCMT' è in conflitto con l'utilizzo di altre librerie; usare /NODEFAULTLIB:libreria
+  Generazione codice in corso...
+  13 of 4436 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    1 functions had inline decision re-evaluated but remain unchanged
+  Generazione codice terminata
+  UltimateAnticheat.vcxproj -> C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\x64\Release\game.exe
+  Copy Splash Image
+          1 file copiati.
+  game.exe: F33D20764E907C253D85003B6D42ABA2A5E5935B0617169D0127706DB55166C3
+  duff.dll: BA07565355354A7C5281F72D0A05B851CFB6FE7852E811E99BD6BF9692787F23
+  Updater.exe: F98FAB2FA0C697A36CC0CF950FC3027C306AEA760630618AB5ACFDB70FDF2F41
+  x32.exe: 1CE361B5BF589F0E86B846939ECD5AD325D97E128FBD891C04089BCA896A5CE4
+  
+  SHA256 aggiornati in sha256_hashes.hpp
+  Copiato Updater.exe in C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\Duff_Client-v20\Updater.exe
+  Copiato duff.dll in C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\Duff_Client-v20\duff.dll
+  Copiato game.exe in C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\Duff_Client-v20\game.exe
+  ´╗┐
