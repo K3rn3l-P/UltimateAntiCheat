@@ -1,25 +1,58 @@
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-*.iobj
-*.tlog
-*.pdb
-*.ipdb
-*.log
-*.res
-*.cache
-*.recipe
-/x64
-/.vs
-/.vscode
-/Debug
+# Build output directories
+/build/
+/x64/
+/Debug/
+/Release/
+/bin/
 
-# Executables
+# CMake generated files
+/CMakeFiles/
+/cmake_install.cmake
+/CMakeCache.txt
+/ALL_BUILD.vcxproj
+/ALL_BUILD.vcxproj.filters
+/ZERO_CHECK.vcxproj
+/ZERO_CHECK.vcxproj.filters
+
+# Visual Studio and VSCode
+/.vs/
+/.vscode/
+*.user
+*.suo
+
+# Compiled object and binary files
+*.obj
+*.o
+*.lo
+*.slo
 *.exe
+*.dll
+*.so
+*.a
 *.out
 *.app
+*.pdb
+*.idb
+*.ipch
+*.lastbuildstate
+*.ilk
+*.exp
+*.res
+*.cache
+
+# Precompiled headers
+*.gch
+*.pch
+
+# Log files
+*.log
+*.tlog
+
+# Ignore evidence, temp, and misc
+*.aps
+*.tmp
+*.bak
+*.old
 
 # Compiled Log
 /UltimateAnticheat.log
