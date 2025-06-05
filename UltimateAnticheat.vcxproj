@@ -143,11 +143,10 @@
       <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(ProjectDir)\splash.png" "$(ProjectDir)\x64\Debug\splash.png" 
-copy "$(ProjectDir)\DLLs\libcurl-d.dll" "$(ProjectDir)\x64\Debug\libcurl-d.dll"
-copy "$(ProjectDir)\DLLs\zlibd1.dll" "$(ProjectDir)\x64\Debug\zlibd1.dll"
-powershell -ExecutionPolicy Bypass -File "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\script\sha256_hashes.ps1"
-</Command>
+      <Command>if not exist "$(ProjectDir)x64\Release" mkdir "$(ProjectDir)x64\Release"
+xcopy /Y /I "$(ProjectDir)splash.png" "$(ProjectDir)x64\Release\"
+powershell -ExecutionPolicy Bypass -File "$(ProjectDir)script\sha256_hashes.ps1"
+powershell -ExecutionPolicy Bypass -File "$(ProjectDir)script\ExportAndCopyXorKey.ps1"</Command>
       <Message>Copy Splash Image</Message>
     </PostBuildEvent>
   </ItemDefinitionGroup>
