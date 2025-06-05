@@ -9,6 +9,11 @@
 /Debug
 /Release
 /bin
+**/x64/
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
 
 # CMake generated files
 /CMakeFiles/
@@ -27,6 +32,7 @@
 
 # Compiled object and binary files
 *.obj
+*.iobj
 *.o
 *.lo
 *.slo
@@ -37,6 +43,7 @@
 *.out
 *.app
 *.pdb
+*.ipdb
 *.idb
 *.ipch
 *.lastbuildstate
