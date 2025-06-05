@@ -1,3 +1,9 @@
+# Rimuovi i file gia' tracciati dalla cache di Git:
+# Esegui questi comandi nella root del repository:
+#git rm -r --cached .
+#git add .
+#git commit -m "Aggiorna .gitignore e rimuovi file build tracciati"
+
 # Build output directories
 /build/
 /x64/
