@@ -4,6 +4,11 @@
 /Debug/
 /Release/
 /bin/
+/build
+/x64
+/Debug
+/Release
+/bin
 
 # CMake generated files
 /CMakeFiles/
