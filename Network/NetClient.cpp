@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <wincrypt.h>
 #pragma comment(lib, "bcrypt.lib")
+#include "../Common/SHA256Utils.hpp" // o il path corretto
 
 
 /*
@@ -13,6 +14,8 @@
 */
 Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port, __in const std::string gameCode)
 {
+	std::string exeHash = CalculateFileSHA256(L".\\x32.exe");
+
 	WSADATA wsaData;
 	SOCKET Socket = INVALID_SOCKET;
 	SOCKADDR_IN SockAddr;
@@ -42,7 +45,7 @@ Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port,
 		return Error::CANT_CONNECT;
 	}
 
-	PacketWriter* p = Packets::Builder::ClientHello(gameCode, this->HardwareID, this->GetHostname(), this->GetMACAddress());
+	PacketWriter* p = Packets::Builder::ClientHello(gameCode, this->HardwareID, this->GetHostname(), this->GetMACAddress(), exeHash);
 
 	Error sendResult = SendData(p);
 
@@ -84,13 +87,13 @@ Error NetClient::EndConnection(__in const int reason)
 	Error err = Error::OK;
 
 	if (this->Socket != SOCKET_ERROR)
-{
-    if (this->SendData(p) != Error::OK)
-        err = Error::CANT_SEND;
+	{
+		if (this->SendData(p) != Error::OK)
+			err = Error::CANT_SEND;
 
-    shutdown(this->Socket, SD_SEND);
-    Sleep(200); // Attendi che il pacchetto venga trasmesso
-}
+		shutdown(this->Socket, SD_SEND);
+		Sleep(200); // Attendi che il pacchetto venga trasmesso
+	}
 
 	if (Socket != SOCKET_ERROR && Socket != NULL)
 	{
@@ -107,7 +110,7 @@ Error NetClient::EndConnection(__in const int reason)
 /*
 	SendData - Sends `outPacket` parameter to the server
 	returns Error::OK on success
-	Function deletes memory of outPacket on success 
+	Function deletes memory of outPacket on success
 */
 Error NetClient::SendData(__in PacketWriter* outPacket)
 {
@@ -117,9 +120,18 @@ Error NetClient::SendData(__in PacketWriter* outPacket)
 	if (this->Socket == SOCKET_ERROR)
 		return Error::BAD_SOCKET;
 
+	// Subito prima di CipherData
+	for (int i = 0; i < outPacket->GetSize(); ++i)
+		printf("%02X ", outPacket->GetBuffer()[i]);
+	printf(" <-- buffer PRIMA della cifratura\n");
+
 	LPBYTE encryptedBuffer = (LPBYTE)outPacket->GetBuffer();
 
 	CipherData(encryptedBuffer, outPacket->GetSize());
+
+	for (int i = 0; i < outPacket->GetSize(); ++i)
+		printf("%02X ", encryptedBuffer[i]);
+	printf("\n");
 
 	Error err = Error::OK;
 
@@ -188,7 +200,7 @@ void NetClient::ProcessRequests(__in LPVOID Param)
 			{
 				Client->CipherData(recvBuf, bytesIn);
 
-				
+
 				PacketReader* p = new PacketReader(recvBuf, bytesIn);
 				Client->HandleInboundPacket(p);
 				delete p;
@@ -286,59 +298,59 @@ Error NetClient::HandleInboundPacket(__in PacketReader* p)
 
 	switch (opcode) //parse server-to-client packets
 	{
-		case Packets::Opcodes::SC_HELLO: //AC initialization can possibly be put into this handler. server is confirming game license code was fine
+	case Packets::Opcodes::SC_HELLO: //AC initialization can possibly be put into this handler. server is confirming game license code was fine
+	{
+		uint16_t softwareVersion = p->readShort();
+		HandshakeCompleted = true;
+		Logger::logf(Info, "Got reply from server with version: %d", softwareVersion);
+	}break;
+
+	case Packets::Opcodes::SC_HEARTBEAT: //auth cookie every few minutes
+	{
+		short cookie_len = p->readShort();
+
+		if (cookie_len != 128)
+			return Error::INCOMPLETE_RECV;
+
+		string cookie = p->readString(128);
+
+		const char* ResponseCookie = MakeHeartbeat(cookie);
+
+		if (ResponseCookie != NULL)
 		{
-			uint16_t softwareVersion = p->readShort();
-			HandshakeCompleted = true;
-			Logger::logf(Info, "Got reply from server with version: %d", softwareVersion);
-		}break;
+			PacketWriter* Response = Packets::Builder::Heartbeat(ResponseCookie);
 
-		case Packets::Opcodes::SC_HEARTBEAT: //auth cookie every few minutes
-		{
-			short cookie_len = p->readShort();
-
-			if (cookie_len != 128)
-				return Error::INCOMPLETE_RECV;
-
-			string cookie = p->readString(128);
-
-			const char* ResponseCookie = MakeHeartbeat(cookie);
-
-			if (ResponseCookie != NULL)
+			if (SendData(Response) != Error::OK)
 			{
-				PacketWriter* Response = Packets::Builder::Heartbeat(ResponseCookie);
-
-				if (SendData(Response) != Error::OK)
-				{
-					Logger::logf(Err, "Could not send heartbeat @ HandleInboundPacket");
-					err = Error::BAD_HEARTBEAT;
-				}
-
-				delete[] ResponseCookie;
-				ResponseCookie = nullptr; //remove use-after-free possibility
-			}
-			else
-			{
-				Logger::logf(Err, "Failed to generate heartbeat @ HandleInboundPacket");
+				Logger::logf(Err, "Could not send heartbeat @ HandleInboundPacket");
 				err = Error::BAD_HEARTBEAT;
 			}
-		}break;
 
-		case Packets::Opcodes::SC_QUERY_MEMORY: //server requests byte data @ address
+			delete[] ResponseCookie;
+			ResponseCookie = nullptr; //remove use-after-free possibility
+		}
+		else
 		{
-			uint64_t address = p->readLong();
-			uint32_t size = p->readInt();
+			Logger::logf(Err, "Failed to generate heartbeat @ HandleInboundPacket");
+			err = Error::BAD_HEARTBEAT;
+		}
+	}break;
 
-			if (QueryMemory(address, size) != Error::OK)
-			{
-				Logger::logf(Err, "Could not query memory bytes for server auth @ HandleInboundPacket");
-				err = Error::GENERIC_FAIL;
-			}
-		}break;
+	case Packets::Opcodes::SC_QUERY_MEMORY: //server requests byte data @ address
+	{
+		uint64_t address = p->readLong();
+		uint32_t size = p->readInt();
 
-		default:
-			err = Error::BAD_OPCODE;
-			break;
+		if (QueryMemory(address, size) != Error::OK)
+		{
+			Logger::logf(Err, "Could not query memory bytes for server auth @ HandleInboundPacket");
+			err = Error::GENERIC_FAIL;
+		}
+	}break;
+
+	default:
+		err = Error::BAD_OPCODE;
+		break;
 	}
 
 	return err;
@@ -429,7 +441,7 @@ void __forceinline NetClient::CipherData(__inout LPBYTE buffer, __in const int l
 
 	for (int i = 0; i < length; i++)
 	{
-		if(i % 2 == 0)
+		if (i % 2 == 0)
 			buffer[i] = (buffer[i] ^ XorKey) + OperationKey;
 		else
 			buffer[i] = (buffer[i] ^ XorKey) - OperationKey;
@@ -527,15 +539,15 @@ string NetClient::GetHardwareID()
 	else
 		HWID = "Failed to generate HWID.";
 
-		return HWID;
-	}
+	return HWID;
+}
 
-	// --- Qui inizia la definizione della nuova funzione ---
-	void NetClient::SendErrorAndExit(const std::string & errorMsg)
-	{
-		PacketWriter* p = new PacketWriter(9999);
-		p->WriteString(errorMsg);
-		this->SendData(p);
-		Sleep(100); // Attendi che il pacchetto venga inviato
-		ExitProcess(1);
-	}
+// --- Qui inizia la definizione della nuova funzione ---
+void NetClient::SendErrorAndExit(const std::string& errorMsg)
+{
+	PacketWriter* p = new PacketWriter(9999);
+	p->WriteString(errorMsg);
+	this->SendData(p);
+	Sleep(100); // Attendi che il pacchetto venga inviato
+	ExitProcess(1);
+}

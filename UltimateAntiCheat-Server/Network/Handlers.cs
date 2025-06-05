@@ -2,15 +2,21 @@
 
 using System;
 using System.Text;
+using System.IO;
 
 namespace UACServer.Network
 {
     internal class Handlers
     {
-        public static bool HandleClientHello(AntiCheatClient c, PacketReader p) //hardwareID, hostname, MAC addr as fields
+        public static bool HandleClientHello(AntiCheatClient c, PacketReader p, out string failReason, out bool alreadyLogged) //hardwareID, hostname, MAC addr as fields
         {
+            failReason = null;
+            alreadyLogged = false;
+
             ushort gamecode_len = p.ReadUShort();
-            string gamecode = p.ReadString(gamecode_len);
+            string encrypted_gamecode = p.ReadString(gamecode_len);
+            string xorKey = GetXorKey();
+            string gamecode = XorDecryptAdvanced(encrypted_gamecode, xorKey);
 
             ushort hardware_id_len = p.ReadUShort();
             string hardware_id = p.ReadString(hardware_id_len);
@@ -21,16 +27,65 @@ namespace UACServer.Network
             ushort MAC_len = p.ReadUShort();
             string MAC = p.ReadString(MAC_len);
 
-            if (hardware_id_len == 0 || hostname_len == 0 || MAC_len == 0)
+            // --- LEGGI HASH ---
+            ushort hash_len = p.ReadUShort();
+            string exeHash = p.ReadString(hash_len);
+
+            if (hardware_id_len == 0 || hostname_len == 0 || MAC_len == 0 || hash_len == 0)
+            {
+                failReason = "Uno o più campi obbligatori sono vuoti";
                 return false;
+            }
 
             c.hardware_id = hardware_id;
             c.hostname = hostname;
             c.mac_address = MAC;
             c.gamecode = gamecode;
 
+            // --- VALIDAZIONE HASH ---
+            if (!string.Equals(exeHash, ExpectedHashes.X32Exe, StringComparison.OrdinalIgnoreCase))
+            {
+                failReason = $"Hash x32.exe non valido: {exeHash}";
+                Logger.Log("DACServer.log", $"[SECURITY] Hash x32.exe non valido da {c.ip_addr}: {exeHash}");
+                DatabaseLogger.LogDetection(
+                    c.id,
+                    "InvalidExeHash",
+                    $"Hash x32.exe non valido: {exeHash}",
+                    hostname,
+                    gamecode,
+                    c.ip_addr?.ToString(),
+                    MAC,
+                    hardware_id
+                );
+                alreadyLogged = true;
+                return false;
+            }
+
+            // Log hash valido
+            Logger.Log("DACServer.log", $"[SECURITY] Hash x32.exe valido da {c.ip_addr}: {exeHash}");
+            DatabaseLogger.LogEvent(c.id, "ValidExeHash", $"Hash x32.exe valido: {exeHash}");
+
             return true;
         }
+        private static string GetXorKey()
+        {
+            // Il file viene generato dal client ad ogni build e copiato nel server
+            return File.ReadAllText("xor_key.txt");
+        }
+        public static string XorDecryptAdvanced(string input, string key)
+        {
+            var output = new char[input.Length];
+            for (int i = 0; i < input.Length; i++)
+            {
+                // Inverti la rotazione e l'offset
+                byte b = (byte)input[i];
+                b = (byte)((b >> ((i % 3) + 1)) | (b << (8 - ((i % 3) + 1))));
+                b = (byte)(b - (byte)(i % 7));
+                output[i] = (char)(b ^ key[i % key.Length]);
+            }
+            return new string(output);
+        }
+
 
         public static bool HandleClientHeartbeat(AntiCheatClient c, string heartbeat)
         {

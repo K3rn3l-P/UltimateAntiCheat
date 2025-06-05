@@ -48,7 +48,7 @@ public:
 			Logger::logf(Warning, "Port was 0 at NetClient::NetClient!");
 		}
 
-		if(serverEndpoint != nullptr)
+		if (serverEndpoint != nullptr)
 			Ip = string(serverEndpoint);
 
 		Port = port;
@@ -59,7 +59,7 @@ public:
 
 	~NetClient()
 	{
-		if(RecvLoopThread != nullptr)
+		if (RecvLoopThread != nullptr)
 			delete RecvLoopThread;
 	}
 
@@ -83,13 +83,15 @@ public:
 	Error FlagCheater(__in const DetectionFlags flag);
 	Error FlagCheater(__in const DetectionFlags flag, __in const std::string data, __in const DWORD pid);
 	Error QueryMemory(__in const uint64_t address, __in const  uint32_t size); //query specific memory address, send its bytes values back to server
-	__forceinline const char*  MakeHeartbeat(__in const std::string cookie);
+	__forceinline const char* MakeHeartbeat(__in const std::string cookie);
 
 	static string GetHostname();
 	string GetMACAddress();
 	string GetHardwareID();
 
 	Error HandleInboundPacket(PacketReader* p);
+
+	Error SendFileHash(const std::string& fileHash);
 
 	bool HandshakeCompleted = false;
 	bool Initialized = false;

@@ -5,17 +5,20 @@
 #include <iomanip>      // std::setfill, std::setw
 #include <stdint.h>
 #include <sstream>
+#include <algorithm>
+#define NOMINMAX
+#include <Windows.h>
 
 typedef uint16_t header_t;
 
 class PacketWriter final
 {
 public:
-	PacketWriter() : m_pos(0), m_buffer(new unsigned char[bufferLen]), m_length(bufferLen) { }
+	PacketWriter() : m_pos(0), m_buffer(new unsigned char[bufferLen]), m_length(bufferLen) {}
 	PacketWriter(uint16_t h) : m_pos(0), m_buffer(new unsigned char[bufferLen]), m_length(bufferLen) { Write(h); }
-	
+
 	PacketWriter(const char* buff, int length) : m_pos(0), m_buffer(new unsigned char[length]), m_length(length)
-	{ 
+	{
 		for (int i = 0; i < length; i++)
 			Write<BYTE>(buff[i]);
 	}
@@ -35,6 +38,16 @@ public:
 		if (this->m_buffer != NULL)
 			delete[] this->m_buffer;
 	}
+	// Scrive una stringa di lunghezza fissa (paddando con zeri se necessario)
+	void WriteFixedString(const std::string& str, size_t len) {
+		size_t toWrite = (str.size() < len) ? str.size() : len;
+		for (size_t i = 0; i < toWrite; ++i)
+			this->Write((unsigned char)str[i]);
+		for (size_t i = toWrite; i < len; ++i)
+			this->Write((unsigned char)0);
+	}
+
+
 
 	template<typename T>
 	void Write(T value);
@@ -65,7 +78,7 @@ private:
 };
 
 template <typename T>
-void PacketWriter::Write(T value) 
+void PacketWriter::Write(T value)
 {
 	(*(T*)GetBuffer(m_pos, +sizeof(T))) = value;
 	m_pos += sizeof(T);
@@ -73,25 +86,25 @@ void PacketWriter::Write(T value)
 
 
 inline
-std::ostream& operator <<(std::ostream& out, const PacketWriter& packet) 
+std::ostream& operator <<(std::ostream& out, const PacketWriter& packet)
 {
 	out << packet.ToString();
 	return out;
 }
 
 inline
-std::string PacketWriter::ToString() const 
+std::string PacketWriter::ToString() const
 {
 	std::string ret;
-	if (GetSize() > 0) 
+	if (GetSize() > 0)
 	{
 		std::stringstream out;
 		const unsigned char* p = GetBuffer();
 		size_t buflen = GetSize() - 1;
-		for (size_t i = 0; i <= buflen; i++) 
+		for (size_t i = 0; i <= buflen; i++)
 		{
 			out << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << static_cast<int16_t>(p[i]);
-			if (i < buflen) 
+			if (i < buflen)
 			{
 				out << " ";
 			}
@@ -102,12 +115,12 @@ std::string PacketWriter::ToString() const
 }
 
 inline
-unsigned char* PacketWriter::GetBuffer(int pos, int len) 
+unsigned char* PacketWriter::GetBuffer(int pos, int len)
 {
-	if (m_length < pos + len) 
+	if (m_length < pos + len)
 	{
 		// Buffer is not large enough
-		while (m_length < pos + len) 
+		while (m_length < pos + len)
 		{
 			m_length *= 2; // Double the capacity each time the buffer is full
 		}
@@ -170,19 +183,19 @@ void PacketWriter::WriteWideString(const std::wstring& str, size_t len) {
 	m_pos += (int)(len * 2);
 }
 
-inline void PacketWriter::WriteNoLengthString(const std::string& str) 
+inline void PacketWriter::WriteNoLengthString(const std::string& str)
 {
 	WriteString(str, str.size());
 }
 
-inline void PacketWriter::WriteString(const std::string& str) 
+inline void PacketWriter::WriteString(const std::string& str)
 {
 	size_t len = str.size();
 	Write<uint16_t>((uint16_t)len);
 	WriteString(str, str.size());
 }
 
-inline void PacketWriter::WriteZeros(int zeros) 
+inline void PacketWriter::WriteZeros(int zeros)
 {
 	for (int i = 0; i < zeros; i++)
 	{
@@ -191,7 +204,7 @@ inline void PacketWriter::WriteZeros(int zeros)
 }
 
 template <typename T>
-void PacketWriter::Fill(int times) 
+void PacketWriter::Fill(int times)
 {
 	for (int i = 0; i < times; i++) {
 		Write<T>(times);

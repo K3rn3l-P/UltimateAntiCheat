@@ -1,5 +1,7 @@
 //By AlSch092 @github
 #include "Detections.hpp"
+#include "Obscure/XorStr.hpp"
+#define OBFUSCATE(str) make_encrypted(L##str)
 
 Detections::Detections(Settings* s, EvidenceLocker* evidence, BOOL StartMonitor, shared_ptr<NetClient> client) : Config(s), EvidenceManager(evidence), netClient(client)
 {
@@ -11,9 +13,9 @@ Detections::Detections(Settings* s, EvidenceLocker* evidence, BOOL StartMonitor,
 
     try
     {
-		auto sections = Process::GetSections(_MAIN_MODULE_NAME);
+        auto sections = Process::GetSections(_MAIN_MODULE_NAME);
 
-        if(sections.size() > 0)
+        if (sections.size() > 0)
             _Proc = make_unique<Process>(sections.size());
         else
             _Proc = make_unique<Process>(6); //.text , .rdata, .data, .pdata, .rsrc, .reloc, .tls, 
@@ -99,7 +101,7 @@ bool Detections::StartMonitor()
     this->MonitorThread = new Thread((LPTHREAD_START_ROUTINE)&Monitor, (LPVOID)this, true, false);
 
     Logger::logf(Info, "Created monitoring thread with ID %d", this->MonitorThread->GetId());
-    
+
     if (this->MonitorThread->GetId() == 0)
     {
         Logger::logf(Err, " Failed to create monitor thread  @ Detections::StartMonitor");
@@ -139,14 +141,14 @@ VOID CALLBACK Detections::OnDllNotification(ULONG NotificationReason, const PLDR
 */
 void Detections::CheckDLLSignature()
 {
-    while (true) 
+    while (true)
     {
         wstring FullDllName;
-     
+
         {
             std::lock_guard<std::mutex> lock(this->DLLVerificationQueueMutex); //lock only for queue access
-            
-            if (this->DLLVerificationQueue.empty()) 
+
+            if (this->DLLVerificationQueue.empty())
             {
                 break;
             }
@@ -155,7 +157,7 @@ void Detections::CheckDLLSignature()
             this->DLLVerificationQueue.pop();
 
         }  //mutex is unlocked here automatically since lock_guard works as a RAII and we create scope with { and }
- 
+
         if (FullDllName.size() > 0) //now do the expensive work without holding the lock
         {
             if (!Authenticode::HasSignature(FullDllName.c_str(), TRUE))
@@ -166,7 +168,7 @@ void Detections::CheckDLLSignature()
             }
             else
             {
-                if(find(this->PassedCertCheckModules.begin(), this->PassedCertCheckModules.end(), FullDllName) == this->PassedCertCheckModules.end())
+                if (find(this->PassedCertCheckModules.begin(), this->PassedCertCheckModules.end(), FullDllName) == this->PassedCertCheckModules.end())
                     this->PassedCertCheckModules.push_back(FullDllName); //add proper signed module to cache
             }
         }
@@ -204,7 +206,7 @@ void Detections::Monitor(__in LPVOID thisPtr)
     if (Monitor->Config->bCheckIntegrity) //integrity check setup if option is enabled
     {
         list<ProcessData::Section*> sections = Process::GetSections(_MAIN_MODULE_NAME);
-            
+
         Monitor->SetSectionHash(_MAIN_MODULE_NAME, ".text"); //set our memory hashes of .text
         Monitor->SetSectionHash(_MAIN_MODULE_NAME, ".rdata");
 
@@ -227,7 +229,7 @@ void Detections::Monitor(__in LPVOID thisPtr)
             if (section == nullptr)
                 continue;
 
-            if(section->name == ".text")          
+            if (section->name == ".text")
             {
                 CachedTextSectionAddress = section->address + ModuleAddr;  //cache our .text sections address and memory size, since an attacker could possibly spoof the section name or # of sections in ntheaders to prevent section traversing
                 CachedTextSectionSize = section->size;
@@ -239,7 +241,7 @@ void Detections::Monitor(__in LPVOID thisPtr)
             }
         }
     }
-    
+
     //Main Monitor Loop, continuous detections go in here. we need access to CachedSectionAddress variables so this loop doesnt get its own function.
     bool Monitoring = true;
     const int MonitorLoopMilliseconds = 5000;
@@ -324,7 +326,7 @@ void Detections::Monitor(__in LPVOID thisPtr)
             {
                 Logger::logf(Detection, "Found potentially manually mapped region at: %llX", mappedRegionAddress);
                 Monitor->EvidenceManager->AddFlagged(DetectionFlags::MANUAL_MAPPING, std::to_string(mappedRegionAddress), GetCurrentProcessId());
-            }        
+            }
         }
 
         if (Monitor->GetConfig() != nullptr && Monitor->GetConfig()->bEnforceDSE) //check for unsigned drivers loaded
@@ -344,6 +346,12 @@ void Detections::Monitor(__in LPVOID thisPtr)
         {
             Logger::logf(Detection, "Found blacklisted process!");
             Monitor->EvidenceManager->AddFlagged(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
+
+            // Invio immediato al server
+            auto netClientWeak = Monitor->GetNetClient();
+            if (auto netClient = netClientWeak.lock()) {
+                netClient->FlagCheater(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
+            }
         }
 
         //make sure ws2_32.dll is actually loaded if this gives an error, on my build the dll is not loaded but we'll pretend it is
@@ -374,7 +382,7 @@ void Detections::Monitor(__in LPVOID thisPtr)
         if (Detections::IsTextSectionWritable()) //page protections check, can be made more granular or loop over all mem pages
         {
             Logger::logf(Detection, ".text section was writable, which means someone re-re-mapped our memory regions! (or you ran this in DEBUG build)");
-            
+
 #ifndef _DEBUG           //in debug build we are not remapping, and software breakpoints in VS may cause page protections to be writable
             Monitor->EvidenceManager->AddFlagged(DetectionFlags::PAGE_PROTECTIONS);
 #endif
@@ -413,7 +421,7 @@ bool Detections::FetchBlacklistedBytePatterns(__in const char* url)
     if (response.size() == 0)
         return false;
 
-    stringstream ss (response);
+    stringstream ss(response);
 
     string bytePattern;
 
@@ -430,7 +438,7 @@ bool Detections::FetchBlacklistedBytePatterns(__in const char* url)
 
         stringstream ss2(bytePattern);
         string _byte;
-        
+
         while (getline(ss2, _byte, ' '))
         {
             if (_byte.size() >= 2 && _byte[0] == '/' && _byte[1] == '/') //found comment at end of pattern, don't parse this part
@@ -439,7 +447,7 @@ bool Detections::FetchBlacklistedBytePatterns(__in const char* url)
             uint8_t byte = stoul(_byte, nullptr, 16);
             bytes.push_back(byte);
         }
-     
+
         this->BlacklistedBytePatterns.emplace_back(BytePattern(bytes, bytes.size()));
     }
 
@@ -460,8 +468,8 @@ bool Detections::SetSectionHash(__in const char* moduleName, __in const char* se
 
     if (GetIntegrityChecker() == nullptr)
     {
-		Logger::logf(Err, "IntegrityChecker was nullptr @ SetSectionHash");
-		return false;
+        Logger::logf(Err, "IntegrityChecker was nullptr @ SetSectionHash");
+        return false;
     }
 
     bool funcFailed = false;
@@ -475,7 +483,7 @@ bool Detections::SetSectionHash(__in const char* moduleName, __in const char* se
     }
 
     list<ProcessData::Section*> sections = Process::GetSections(moduleName);
-    
+
     if (sections.size() == 0)
     {
         Logger::logf(Err, "sections.size() of section %s was 0 @ SetSectionHash", sectionName);
@@ -483,12 +491,12 @@ bool Detections::SetSectionHash(__in const char* moduleName, __in const char* se
         goto cleanup;
     }
 
-    for (auto section : sections) 
+    for (auto section : sections)
     {
         if (section == nullptr)
             continue;
 
-		if (section->name == sectionName)
+        if (section->name == sectionName)
         {
             vector<uint64_t> hashes = GetIntegrityChecker()->GetMemoryHash((uint64_t)section->address + ModuleAddr, section->size);
 
@@ -561,7 +569,7 @@ bool Detections::IsSectionHashUnmatching(__in const UINT64 cachedAddress, __in c
 }
 
 /*
-    IsBlacklistedProcessRunning 
+    IsBlacklistedProcessRunning
     returns TRUE if a blacklisted program is running in the background, blacklisted processes can be found in the class constructor
 */
 bool Detections::IsBlacklistedProcessRunning() const
@@ -649,7 +657,7 @@ bool Detections::DoesFunctionAppearHooked(__in const char* moduleName, __in cons
         if (*(BYTE*)AddressFunction == 0xE8 || *(BYTE*)AddressFunction == 0xE9 || *(BYTE*)AddressFunction == 0xEA || *(BYTE*)AddressFunction == 0xEB) //0xEB = short jump, 0xE8 = call X, 0xE9 = long jump, 0xEA = "jmp oper2:oper1"
             FunctionPreambleHooked = true;
     }
-    __except(EXCEPTION_EXECUTE_HANDLER)
+    __except (EXCEPTION_EXECUTE_HANDLER)
     {
         Logger::logf(Warning, " Couldn't read bytes @ Detections::DoesFunctionAppearHooked: %s", functionName);
         return false; //couldn't read memory at function
@@ -693,7 +701,7 @@ bool Detections::DoesIATContainHooked()
                 isIATHooked = true;
                 break;
             }
-                
+
         }
         else //error, we shouldnt get here!
         {
@@ -855,62 +863,62 @@ bool Detections::IsBlacklistedWindowPresent()
 
     if (hUser32 != NULL)
     {
-        auto WindowCallback = [](HWND hwnd, LPARAM lParam) -> BOOL 
-        {
-            char windowTitle[256]{ 0 };
-            char className[256]{ 0 };
-            const int xorKey1 = 0x44;
-            const int xorKey2 = 0x47;
-
-            Detections* Monitor = reinterpret_cast<Detections*>(lParam); //optionally, make blacklisted xor'd strings into a list in Detections class
-
-            unsigned char CheatEngine[] =  //"Cheat Engine"
-            { 
-                'C' ^ xorKey1, 'h' ^ xorKey1, 'e' ^ xorKey1, 'a' ^ xorKey1, 't' ^ xorKey1, ' ' ^ xorKey1,
-                'E' ^ xorKey1, 'n' ^ xorKey1, 'g' ^ xorKey1, 'i' ^ xorKey1, 'n' ^ xorKey1, 'e' ^ xorKey1
-            };
-
-            unsigned char LuaScript[] = // //"Lua script:"
-            { 
-                'L' ^ xorKey2, 'u' ^ xorKey2, 'a' ^ xorKey2, ' ' ^ xorKey2,
-                's' ^ xorKey2, 'c' ^ xorKey2, 'r' ^ xorKey2, 'i' ^ xorKey2,
-                'p' ^ xorKey2, 't' ^ xorKey2, ':' ^ xorKey2
-            };
-
-            char original_CheatEngine[13]{ 0 };
-            char original_LUAScript[12]{ 0 };
-
-            for (int i = 0; i < sizeof(original_CheatEngine) - 1; i++) //13 - 1 to stop last 00 from being xor'd
+        auto WindowCallback = [](HWND hwnd, LPARAM lParam) -> BOOL
             {
-                original_CheatEngine[i] = (char)(CheatEngine[i] ^ xorKey1);
-            }
+                char windowTitle[256]{ 0 };
+                char className[256]{ 0 };
+                const int xorKey1 = 0x44;
+                const int xorKey2 = 0x47;
 
-            for (int i = 0; i < sizeof(original_LUAScript) - 1; i++)
-            {
-                original_LUAScript[i] = (char)(LuaScript[i] ^ xorKey2);
-            }
+                Detections* Monitor = reinterpret_cast<Detections*>(lParam); //optionally, make blacklisted xor'd strings into a list in Detections class
 
-            if (GetWindowTextA(hwnd, windowTitle, sizeof(windowTitle)))
-            {
-                if (GetClassNameA(hwnd, className, sizeof(className)))
+                unsigned char CheatEngine[] =  //"Cheat Engine"
                 {
-                    if (strcmp(windowTitle, (const char*)original_CheatEngine) == 0  || strstr(windowTitle, (const char*)original_CheatEngine) != NULL) //*note* this will detect open folders named "Cheat Engine" also, which doesn't imply the actual program is opened.
+                    'C' ^ xorKey1, 'h' ^ xorKey1, 'e' ^ xorKey1, 'a' ^ xorKey1, 't' ^ xorKey1, ' ' ^ xorKey1,
+                    'E' ^ xorKey1, 'n' ^ xorKey1, 'g' ^ xorKey1, 'i' ^ xorKey1, 'n' ^ xorKey1, 'e' ^ xorKey1
+                };
+
+                unsigned char LuaScript[] = // //"Lua script:"
+                {
+                    'L' ^ xorKey2, 'u' ^ xorKey2, 'a' ^ xorKey2, ' ' ^ xorKey2,
+                    's' ^ xorKey2, 'c' ^ xorKey2, 'r' ^ xorKey2, 'i' ^ xorKey2,
+                    'p' ^ xorKey2, 't' ^ xorKey2, ':' ^ xorKey2
+                };
+
+                char original_CheatEngine[13]{ 0 };
+                char original_LUAScript[12]{ 0 };
+
+                for (int i = 0; i < sizeof(original_CheatEngine) - 1; i++) //13 - 1 to stop last 00 from being xor'd
+                {
+                    original_CheatEngine[i] = (char)(CheatEngine[i] ^ xorKey1);
+                }
+
+                for (int i = 0; i < sizeof(original_LUAScript) - 1; i++)
+                {
+                    original_LUAScript[i] = (char)(LuaScript[i] ^ xorKey2);
+                }
+
+                if (GetWindowTextA(hwnd, windowTitle, sizeof(windowTitle)))
+                {
+                    if (GetClassNameA(hwnd, className, sizeof(className)))
                     {
-                        Monitor->EvidenceManager->AddFlagged(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
-                        Logger::logf(Detection, "Detected a window named 'Cheat Engine' (includes open folder names)");
-                        return false;
-                    }
-                    else if (strstr(windowTitle, (const char*)original_LUAScript))
-                    {
-                        Monitor->EvidenceManager->AddFlagged(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
-                        Logger::logf(Detection, "Detected cheat engine's lua script window");
-                        return false;
+                        if (strcmp(windowTitle, (const char*)original_CheatEngine) == 0 || strstr(windowTitle, (const char*)original_CheatEngine) != NULL) //*note* this will detect open folders named "Cheat Engine" also, which doesn't imply the actual program is opened.
+                        {
+                            Monitor->EvidenceManager->AddFlagged(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
+                            Logger::logf(Detection, "Detected a window named 'Cheat Engine' (includes open folder names)");
+                            return false;
+                        }
+                        else if (strstr(windowTitle, (const char*)original_LUAScript))
+                        {
+                            Monitor->EvidenceManager->AddFlagged(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
+                            Logger::logf(Detection, "Detected cheat engine's lua script window");
+                            return false;
+                        }
                     }
                 }
-            }
 
-            return true;
-        };
+                return true;
+            };
 
         ENUMWINDOWS pEnumWindows = (ENUMWINDOWS)GetProcAddress(hUser32, "EnumWindows");
         if (pEnumWindows != NULL)
@@ -1020,7 +1028,7 @@ void Detections::MonitorProcessCreation(__in LPVOID thisPtr)
 
         HRESULT hr = pEnumerator->Next(WBEM_NO_WAIT, 1, &pclsObj, &uReturn);
 
-        if (0 == uReturn) 
+        if (0 == uReturn)
             continue;
 
         VARIANT vtProp;
@@ -1036,7 +1044,7 @@ void Detections::MonitorProcessCreation(__in LPVOID thisPtr)
             if (pClassObj)
             {
                 VARIANT vtProcId{};
-                VARIANT vtName {};
+                VARIANT vtName{};
                 pClassObj->Get(L"Name", 0, &vtName, 0, 0);
                 pClassObj->Get(L"ProcessId", 0, &vtProcId, 0, 0);
 
@@ -1049,13 +1057,13 @@ void Detections::MonitorProcessCreation(__in LPVOID thisPtr)
                 }
 
                 Logger::logfw(Info, L"Scanning process for blacklisted patterns: %s", vtName.bstrVal);
-          
+
                 if (monitor->FindBlacklistedProgramsThroughByteScan(vtProcId.uintVal))
                 {
                     monitor->EvidenceManager->AddFlagged(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM, Utility::ConvertWStringToString(vtName.bstrVal), GetCurrentProcessId());
                     Logger::logfw(Detection, L"Blacklisted process was found through byte signature: %s", vtName.bstrVal);
                 }
-                
+
                 VariantClear(&vtName);
                 pClassObj->Release();
             }
@@ -1063,8 +1071,8 @@ void Detections::MonitorProcessCreation(__in LPVOID thisPtr)
 
         VariantClear(&vtProp);
         pclsObj->Release();
-        
-        if(monitor->GetMonitorThread() != nullptr)
+
+        if (monitor->GetMonitorThread() != nullptr)
             monitor->GetMonitorThread()->UpdateTick(); //update tick on each loop, then we can check this value from a different thread to see if someone has suspended it
 
         //this_thread::sleep_for(std::chrono::milliseconds(100)); //ease the CPU a bit
@@ -1079,7 +1087,7 @@ void Detections::MonitorProcessCreation(__in LPVOID thisPtr)
 /*
     InitializeBlacklistedProcessesList - add static list of blacklisted process names to our Detections object
     ...we should also scan for window class names, possible exported functions (in any DLLs running in those programs), etc.
-    Most people will of course just rename any common cheat tool names, much better to use byte scanning 
+    Most people will of course just rename any common cheat tool names, much better to use byte scanning
 
     // DOPO
     void Detections::InitializeBlacklistedProcessesList()
@@ -1180,69 +1188,349 @@ do
 void Detections::InitializeBlacklistedProcessesList()
 {
     // Cheat Engine e varianti
-    BlacklistedProcesses.push_back(L"cheat engine.exe");
-    BlacklistedProcesses.push_back(L"cheatengine.exe");
-    BlacklistedProcesses.push_back(L"cheatengine-x86_64.exe");
-    BlacklistedProcesses.push_back(L"cheatengine-x86_64-sse4-avx2.exe");
-    BlacklistedProcesses.push_back(L"cheatengine-i386.exe");
-    BlacklistedProcesses.push_back(L"cheatengine-x86.exe");
+    {
+        auto enc = OBFUSCATE("cheat engine.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("cheatengine.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("cheatengine-x86_64.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("cheatengine-x86_64-sse4-avx2.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("cheatengine-i386.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("cheatengine-x86.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
 
     // Debugger
-    BlacklistedProcesses.push_back(L"ollydbg.exe");
-    BlacklistedProcesses.push_back(L"x64dbg.exe");
-    BlacklistedProcesses.push_back(L"x32dbg.exe");
-    BlacklistedProcesses.push_back(L"windbg.exe");
-    BlacklistedProcesses.push_back(L"ida.exe");
-    BlacklistedProcesses.push_back(L"ida64.exe");
-    BlacklistedProcesses.push_back(L"idaq.exe");
-    BlacklistedProcesses.push_back(L"idaq64.exe");
-    BlacklistedProcesses.push_back(L"scylla.exe");
-    BlacklistedProcesses.push_back(L"scylla_x64.exe");
-    BlacklistedProcesses.push_back(L"scylla_x86.exe");
+    {
+        auto enc = OBFUSCATE("ollydbg.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("x64dbg.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("x32dbg.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("windbg.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("ida.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("ida64.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("idaq.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("idaq64.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("scylla.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("scylla_x64.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("scylla_x86.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
 
     // Process explorer e simili
-    BlacklistedProcesses.push_back(L"procexp.exe");
-    BlacklistedProcesses.push_back(L"procexp64.exe");
-    BlacklistedProcesses.push_back(L"processhacker.exe");
-    BlacklistedProcesses.push_back(L"processhacker-2.39.exe");
-    BlacklistedProcesses.push_back(L"processhacker-2.38.exe");
-    BlacklistedProcesses.push_back(L"processhacker-2.37.exe");
+    {
+        auto enc = OBFUSCATE("procexp.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("procexp64.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("processhacker.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("processhacker-2.39.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("processhacker-2.38.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("processhacker-2.37.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
 
     // Memory editor
-    BlacklistedProcesses.push_back(L"artmoney.exe");
-    BlacklistedProcesses.push_back(L"artmoney64.exe");
-    BlacklistedProcesses.push_back(L"winhex.exe");
-    BlacklistedProcesses.push_back(L"reclass.net.exe");
-    BlacklistedProcesses.push_back(L"reclass64.exe");
-    BlacklistedProcesses.push_back(L"reclass.exe");
+    {
+        auto enc = OBFUSCATE("artmoney.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("artmoney64.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("winhex.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("reclass.net.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("reclass64.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("reclass.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
 
     // Dumper e unpacker
-    BlacklistedProcesses.push_back(L"megadumper.exe");
-    BlacklistedProcesses.push_back(L"extremedumper.exe");
-    BlacklistedProcesses.push_back(L"lordpe.exe");
-    BlacklistedProcesses.push_back(L"pe-bear.exe");
+    {
+        auto enc = OBFUSCATE("megadumper.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("extremedumper.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("lordpe.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("pe-bear.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
 
     // Altri tool noti
-    BlacklistedProcesses.push_back(L"dbgview.exe");
-    BlacklistedProcesses.push_back(L"reshacker.exe");
-    BlacklistedProcesses.push_back(L"tcpview.exe");
-    BlacklistedProcesses.push_back(L"vmware.exe");
-    BlacklistedProcesses.push_back(L"vmware-vmx.exe");
-    BlacklistedProcesses.push_back(L"vmware-authd.exe");
-    BlacklistedProcesses.push_back(L"vmware-hostd.exe");
-    BlacklistedProcesses.push_back(L"vboxservice.exe");
-    BlacklistedProcesses.push_back(L"vboxtray.exe");
-    BlacklistedProcesses.push_back(L"vboxheadless.exe");
-    BlacklistedProcesses.push_back(L"vboxmanage.exe");
-    BlacklistedProcesses.push_back(L"vboxsdl.exe");
-    BlacklistedProcesses.push_back(L"vboxbugreport.exe");
-    BlacklistedProcesses.push_back(L"vboximg-mount.exe");
-    BlacklistedProcesses.push_back(L"vboximg.exe");
+    {
+        auto enc = OBFUSCATE("dbgview.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("reshacker.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("tcpview.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vmware.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vmware-vmx.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vmware-authd.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vmware-hostd.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboxservice.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboxtray.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboxheadless.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboxmanage.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboxsdl.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboxbugreport.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboximg-mount.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("vboximg.exe");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedProcesses.push_back(dec);
+    }
 
-    // Parole chiave sospette
-    BlacklistedKeywords = {
-        L"cheat", L"hack", L"debug", L"trainer", L"inject", L"bypass", L"crack"
-    };
+    // Offusca anche le parole chiave
+    BlacklistedKeywords.clear();
+    {
+        auto enc = OBFUSCATE("cheat");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedKeywords.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("hack");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedKeywords.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("debug");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedKeywords.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("trainer");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedKeywords.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("inject");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedKeywords.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("bypass");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedKeywords.push_back(dec);
+    }
+    {
+        auto enc = OBFUSCATE("crack");
+        wchar_t dec[enc.getSize()] = {};
+        enc.decrypt(dec);
+        BlacklistedKeywords.push_back(dec);
+    }
 }
 
 
@@ -1313,7 +1601,7 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
 
     HKEY hKeys[KEY_COUNT];
     HANDLE hEvents[KEY_COUNT];
-    const TCHAR* subKeys[KEY_COUNT] = 
+    const TCHAR* subKeys[KEY_COUNT] =
     {
         TEXT("SYSTEM\\CurrentControlSet\\Control\\SecureBoot\\State\\"),  //secureboot keys being changed at runtime isn't a big deal in this context
         TEXT("SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\")  //we'll need to find better keys to monitor which can impact integrity at runtime, however this shows as an example of how we can monitor registry changes
@@ -1322,18 +1610,18 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
     DWORD filter = REG_NOTIFY_CHANGE_LAST_SET;
     LONG result;
 
-    for (int i = 0; i < KEY_COUNT; i++) 
+    for (int i = 0; i < KEY_COUNT; i++)
     {
         result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, subKeys[i], 0, KEY_NOTIFY, &hKeys[i]);
 
-        if (result != ERROR_SUCCESS) 
+        if (result != ERROR_SUCCESS)
         {
             Logger::logf(Warning, "Failed to open key %d. Error: %ld @ MonitorImportantRegistryKeys", i, result);
             return;
         }
 
         hEvents[i] = CreateEvent(NULL, FALSE, FALSE, NULL);
-        if (!hEvents[i]) 
+        if (!hEvents[i])
         {
             Logger::logf(Warning, "Failed to create event for key %d. Error: %ld\n", i, GetLastError());
             RegCloseKey(hKeys[i]);
@@ -1341,7 +1629,7 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
         }
 
         result = RegNotifyChangeKeyValue(hKeys[i], TRUE, filter, hEvents[i], TRUE);
-        if (result != ERROR_SUCCESS) 
+        if (result != ERROR_SUCCESS)
         {
             Logger::logf(Warning, "Failed to register notification for key %d. Error: %ld", i, result);
             CloseHandle(hEvents[i]);
@@ -1355,13 +1643,13 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
     bool monitoringKeys = true;
 
     while (monitoringKeys)
-    {        
+    {
         if (Monitor != nullptr && Monitor->GetRegistryMonitorThread() != nullptr && Monitor->GetRegistryMonitorThread()->IsShutdownSignalled()) //end looping if signalled
             break;
-        
+
         DWORD waitResult = WaitForMultipleObjects(KEY_COUNT, hEvents, FALSE, 3000); //wait for any of the events to be signaled
 
-        if (waitResult >= WAIT_OBJECT_0 && waitResult < WAIT_OBJECT_0 + KEY_COUNT) 
+        if (waitResult >= WAIT_OBJECT_0 && waitResult < WAIT_OBJECT_0 + KEY_COUNT)
         {
             int index = waitResult - WAIT_OBJECT_0; //determine which event was signaled
 
@@ -1371,12 +1659,12 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
 
             result = RegNotifyChangeKeyValue(hKeys[index], TRUE, filter, hEvents[index], TRUE);   //re register the notification for the key
 
-            if (result != ERROR_SUCCESS) 
+            if (result != ERROR_SUCCESS)
             {
                 Logger::logf(Warning, "Failed to re-register notification for key %d. Error: %ld", index, result);
             }
         }
-        else 
+        else
         {
             //Logger::logf(Warning, "Unexpected wait result: %ld", waitResult); //this message will display often, commented out to suppress it
             continue;
@@ -1388,9 +1676,9 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
         this_thread::sleep_for(std::chrono::milliseconds(100)); //ease the CPU a bit
     }
 
-    for (int i = 0; i < KEY_COUNT; i++) 
+    for (int i = 0; i < KEY_COUNT; i++)
     {
-        if(hEvents[i] != 0 && hEvents[i] != INVALID_HANDLE_VALUE)
+        if (hEvents[i] != 0 && hEvents[i] != INVALID_HANDLE_VALUE)
             CloseHandle(hEvents[i]);
 
         RegCloseKey(hKeys[i]);
@@ -1456,7 +1744,7 @@ vector<uint64_t> Detections::DetectManualMapping()
                         if (!wsInfo.VirtualAttributes.Shared)  // If not shared, it's likely private
                         {
                             bool foundPossibleSection = false; // I may end up introducing capstone in the project, parsing possible instructions would be great for this routine to have
-                            unsigned char bufferPossibleMappedSection[128] { 0 };
+                            unsigned char bufferPossibleMappedSection[128]{ 0 };
 
                             //todo: make some better way than just using a hardcoded offset , since this can be changed via section alignment in compilation
 

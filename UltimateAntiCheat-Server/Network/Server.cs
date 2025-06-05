@@ -163,10 +163,11 @@ namespace UACServer.Network
 
                 if (bytesRead > 0)
                 {
-                    if (!HandlePacket(c, buffer, bytesRead))
+                    bool alreadyLogged;
+                    if (!HandlePacket(c, buffer, bytesRead, out alreadyLogged))
                     {
                         Logger.Log("DACServer.log", "Client heartbeat was incorrect, disconnecting client " + c?.hardware_id);
-                        if (c == null || !c.gracefulDisconnect)
+                        if (!alreadyLogged && (c == null || !c.gracefulDisconnect))
                         {
                             DatabaseLogger.LogDetection(
                                 c?.id ?? 0,
@@ -179,7 +180,7 @@ namespace UACServer.Network
                                 c?.hardware_id
                             );
                         }
-                        RemoveAuthenticatedSession(c); // <-- AGGIUNTO QUI
+                        RemoveAuthenticatedSession(c);
                         c?.net_client?.Client?.Disconnect(false);
                         c?.net_client?.Dispose();
                         return;
@@ -328,8 +329,9 @@ namespace UACServer.Network
             }
         }
 
-        private bool HandlePacket(AntiCheatClient c, byte[] buffer, int length)
+        private bool HandlePacket(AntiCheatClient c, byte[] buffer, int length, out bool alreadyLogged)
         {
+            alreadyLogged = false;
             try
             {
                 if (buffer == null || length == 0)
@@ -345,9 +347,25 @@ namespace UACServer.Network
                 {
                     case Opcodes.CS.CS_HELLO: //client hello
                         {
-                            if (!Handlers.HandleClientHello(c, p))
+                            string failReason;
+                            bool alreadyLoggedHello;
+                            if (!Handlers.HandleClientHello(c, p, out failReason, out alreadyLoggedHello))
                             {
-                                Logger.Log("DACServer.log", "Client hello transaction failed: gamecode/license was not correct.");
+                                Logger.Log("DACServer.log", $"Client hello transaction failed: {failReason}");
+                                if (!alreadyLoggedHello)
+                                {
+                                    DatabaseLogger.LogDetection(
+                                        c?.id ?? 0,
+                                        "InvalidHello",
+                                        failReason ?? "Client hello fallito per motivo sconosciuto",
+                                        c?.hostname,
+                                        c?.gamecode,
+                                        c?.ip_addr?.ToString(),
+                                        c?.mac_address,
+                                        c?.hardware_id
+                                    );
+                                }
+                                alreadyLogged = true;
                                 return false;
                             }
                             else
@@ -418,22 +436,34 @@ namespace UACServer.Network
                     //flagged as cheater 
                     case Opcodes.CS.CS_FLAGGED_CHEATER:
                         {
-                            c.flagged_cheater = true; //...then ban the cheater at some random time within the next 12h
+                            c.flagged_cheater = true;
                             DetectionFlags cheat_reason = (DetectionFlags)p.ReadShort();
                             Handlers.HandleClientFlaggedCheater(c, cheat_reason);
 
                             // LOGGA LA DETECTION
                             DatabaseLogger.LogDetection(
-        c.id,
-        cheat_reason.ToString(),
-        "Cheat detected",
-        c.hostname,
-        c.gamecode,
-        c.ip_addr?.ToString(),
-        c.mac_address,
-        c.hardware_id
-    );
+                                c.id,
+                                cheat_reason.ToString(),
+                                "Cheat detected",
+                                c.hostname,
+                                c.gamecode,
+                                c.ip_addr?.ToString(),
+                                c.mac_address,
+                                c.hardware_id
+                            );
 
+                            // --- AGGIUNGI QUESTO BLOCCO ---
+                            if (cheat_reason == DetectionFlags.EXTERNAL_ILLEGAL_PROGRAM && c.ip_addr != null)
+                            {
+                                string clientIp = c.ip_addr.ToString();
+                                int externalIllegalCount = TcpProxy.FailedAttempts.AddOrUpdate(clientIp + "_external", 1, (key, old) => old + 1);
+                                if (externalIllegalCount >= TcpProxy.MaxFailedAttempts)
+                                {
+                                    string blockMsg = $"[PROXY][BLOCKED] EXTERNAL_ILLEGAL_PROGRAM Unauthenticated client {clientIp} ({TcpProxy.MaxFailedAttempts} attempt limit reached, IP banned)";
+                                    TcpProxy.BanIpAndUserUid(clientIp, blockMsg);
+                                }
+                            }
+                            // --- FINE BLOCCO ---
                         }
                         break;
 

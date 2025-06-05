@@ -10,8 +10,18 @@ public class TcpProxy
 {
     // Campo statico per tracciare le connessioni attive per IP
     private static readonly ConcurrentDictionary<string, object> ActiveConnections = new ConcurrentDictionary<string, object>();
-    private static readonly ConcurrentDictionary<string, int> FailedAttempts = new ConcurrentDictionary<string, int>();
-    private const int MaxFailedAttempts = 3;
+    public static readonly ConcurrentDictionary<string, int> FailedAttempts = new ConcurrentDictionary<string, int>();
+    public const int MaxFailedAttempts = 3;
+    public static void BanIpAndUserUid(string clientIp, string reason)
+    {
+        DatabaseLogger.BanAccountsByIp(clientIp, reason);
+        DatabaseLogger.LogIpBlocked(clientIp, reason);
+        Logger.Log("DACServer.log", reason);
+
+        int? uid = DatabaseLogger.GetUserUidByIp(clientIp);
+        if (uid.HasValue)
+            DatabaseLogger.BanUserUid(uid.Value, reason);
+    }
 
     private readonly string listenIp;
     private readonly int listenPort;
@@ -81,7 +91,7 @@ public class TcpProxy
 
         Logger.Log("DACServer.log", $"[PROXY] Verifying client {clientIp}");
 
-        int maxAttempts = 10; // DICHIARA QUI maxAttempts
+        int maxAttempts = 3; // DICHIARA QUI maxAttempts
 
         string expectedGamecode = null;
         bool isAuthenticated = false;
@@ -136,18 +146,26 @@ public class TcpProxy
             int failed = FailedAttempts.AddOrUpdate(clientIp, 1, (key, old) => old + 1);
             if (failed == MaxFailedAttempts)
             {
-                string blockMsg = $"[PROXY][BLOCKED] Client non autenticato: {clientIp} (raggiunto il limite di {MaxFailedAttempts} tentativi, IP bannato)";
-                DatabaseLogger.BanAccountsByIp(clientIp, blockMsg);
-                DatabaseLogger.LogIpBlocked(clientIp, blockMsg);
-                Logger.Log("DACServer.log", blockMsg);
-
-                // Ban anche su Users_Bann
-                int? uid = DatabaseLogger.GetUserUidByIp(clientIp);
-                if (uid.HasValue)
-                    DatabaseLogger.BanUserUid(uid.Value, blockMsg);
+                string blockMsg = $"[BLOCKED] Unauthenticated client: {clientIp} ({MaxFailedAttempts} attempt limit reached, IP banned)";
+                BanIpAndUserUid(clientIp, blockMsg);
             }
 
             return;
+        }
+
+        // --- AGGIUNGI QUESTO BLOCCO DOPO L'AUTENTICAZIONE, PRIMA DEL FORWARDING ---
+        if (AnticheatServer.Detections.TryGetValue(DetectionFlags.EXTERNAL_ILLEGAL_PROGRAM, out string detectionMsg))
+        {
+            // Qui puoi controllare se l'IP o UserUID ha già avuto 3 detection di questo tipo
+            int externalIllegalCount = FailedAttempts.AddOrUpdate(clientIp + "_external", 1, (key, old) => old + 1);
+            if (externalIllegalCount >= MaxFailedAttempts)
+            {
+                string blockMsg = $"[PROXY][BLOCKED] EXTERNAL_ILLEGAL_PROGRAM rilevato per {clientIp} (raggiunto il limite di {MaxFailedAttempts} detection, IP bannato)";
+                BanIpAndUserUid(clientIp, blockMsg);
+                client.Close();
+                ActiveConnections.TryRemove(connectionKey, out _);
+                return;
+            }
         }
 
         Logger.Log("DACServer.log", $"[PROXY] Client {clientIp} authenticated successfully.");

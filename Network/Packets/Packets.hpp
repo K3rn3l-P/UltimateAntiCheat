@@ -16,7 +16,7 @@ namespace Packets
 			CS_GOODBYE, //there is no SC_GOODBYE
 			CS_HEARTBEAT, //heartbeats will be a 128-length text string which must be determinated by the server. this means both client and server need to know how to generate the next valid response
 			CS_INFO_LOGGING, //hostname + mac address + hardware ID
-			CS_FLAGGED_CHEATER, 
+			CS_FLAGGED_CHEATER,
 			CS_QUERY_MEMORY,
 		};
 
@@ -27,16 +27,20 @@ namespace Packets
 			SC_INFO_LOGGING,
 			SC_FLAGGED_CHEATER,
 			SC_QUERY_MEMORY,
-		};	
+		};
 	}
 
 	namespace Builder
 	{
-		PacketWriter* ClientHello(string gameCode, string HWID, string Ipv4, string MACAddress);
 		PacketWriter* ClientGoodbye(int reason);
 		PacketWriter* Heartbeat(const char* cookie_str);
 		PacketWriter* DetectedCheater(int flags);
-		PacketWriter* DetectedCheater(__in const uint32_t flags, __in const const std::string detectedModule, __in const DWORD pid);
+		PacketWriter* DetectedCheater(__in const uint32_t flags, __in const std::string detectedModule, __in const DWORD pid);
 		PacketWriter* QueryMemory(byte* bytestring, int size);
+		PacketWriter* ClientHello(const std::string& encryptedGameCode,
+			const std::string& hardwareId,
+			const std::string& hostname,
+			const std::string& mac,
+			const std::string& exeHash);
 	}
 }

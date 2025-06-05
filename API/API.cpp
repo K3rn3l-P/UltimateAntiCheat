@@ -1,6 +1,54 @@
 //By AlSch092 @ Github
 #include "API.hpp"
 #include "../AntiCheat.hpp"
+#include <random>
+#include <sstream>
+#include <iomanip>
+#include <chrono>
+#include "../Common/XorKey.hpp"
+#include <vector>
+#include <string>
+
+std::string XorEncryptAdvanced(const std::string& input, const std::string& key)
+{
+	std::string output = input;
+	for (size_t i = 0; i < input.size(); ++i)
+	{
+		// XOR + rotazione + offset per maggiore offuscamento
+		output[i] = (input[i] ^ key[i % key.size()]) + (char)(i % 7);
+		output[i] = (output[i] << ((i % 3) + 1)) | (output[i] >> (8 - ((i % 3) + 1)));
+	}
+	return output;
+}
+
+static std::string GenerateRandomGameCode()
+{
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_int_distribution<> dis(0, 255);
+
+	unsigned char uuid[16];
+	for (int i = 0; i < 16; ++i)
+		uuid[i] = static_cast<unsigned char>(dis(gen));
+
+	// Set version (4) and variant bits per RFC 4122
+	uuid[6] = (uuid[6] & 0x0F) | 0x40;
+	uuid[8] = (uuid[8] & 0x3F) | 0x80;
+
+	// Timestamp
+	auto now = std::chrono::system_clock::now().time_since_epoch();
+	auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+
+	std::ostringstream oss;
+	oss << "GAMECODE-";
+	for (int i = 0; i < 16; ++i) {
+		oss << std::hex << std::setw(2) << std::setfill('0') << (int)uuid[i];
+		if (i == 3 || i == 5 || i == 7 || i == 9)
+			oss << "-";
+	}
+	oss << "-" << ms;
+	return oss.str();
+}
 
 /*
 	Initialize - Initializes the anti-cheat module by connecting to the auth server (if available) and sending it the game's unique code, and checking the parent process to ensure a rogue launcher wasn't used
@@ -26,7 +74,7 @@ Error API::Initialize(AntiCheat* AC, string licenseKey, bool isServerAvailable)
 		}
 	}
 	// INIZIO:Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
-	
+
 	if (found) {
 		AC->GetMonitor()->GetProcessObj()->SetParentName(realParentName);
 	}
@@ -34,7 +82,7 @@ Error API::Initialize(AntiCheat* AC, string licenseKey, bool isServerAvailable)
 		Logger::logfw(Detection, L"Parent process '%ws' was not whitelisted, shutting down program!", realParentName.c_str());
 		errorCode = Error::PARENT_PROCESS_MISMATCH;
 	}
-	
+
 	// FINE: Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
 
 	if (isServerAvailable)
@@ -62,7 +110,7 @@ Error API::Initialize(AntiCheat* AC, string licenseKey, bool isServerAvailable)
 		Logger::logf(Info, "Networking is currently disabled, no heartbeats will occur");
 	}
 
-end:	
+end:
 	return errorCode;
 }
 
@@ -150,7 +198,7 @@ Error API::LaunchDefenses(AntiCheat* AC) //currently in the process to split the
 	//AC->GetMonitor()->GetServiceManager()->GetServiceModules(); //enumerate services -> currently not in use
 
 	// INIZIO: Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
-	
+
 	std::wstring parentName = AC->GetMonitor()->GetProcessObj()->GetParentName();
 	bool requireSignature = true;
 	if (_wcsicmp(parentName.c_str(), L"Updater.exe") == 0) {
@@ -160,7 +208,7 @@ Error API::LaunchDefenses(AntiCheat* AC) //currently in the process to split the
 		Logger::logf(Detection, "Parent process was not in whitelist!");
 		errorCode = Error::PARENT_PROCESS_MISMATCH;
 	}
-	
+
 	// FINE: Disabilita il controllo parent process qui per TEST (ANCHE IN Detections.cpp)
 	return errorCode;
 }
@@ -175,42 +223,49 @@ Error API::Dispatch(AntiCheat* AC, DispatchCode code)
 
 	switch (code)
 	{
-		case INITIALIZE:
-		{			
-			errorCode = Initialize(AC, "GAMECODE-XyIlqRmRj", AC->GetConfig()->bNetworkingEnabled); //if our parent process isn't whitelisted, shut 'er down!
+	case INITIALIZE:
+	{
+		std::string gameCode = GenerateRandomGameCode();
+		std::string xorKey = GetXorNetworkKey();
+		std::string encryptedGameCode = XorEncryptAdvanced(gameCode, xorKey);
+		// invio encryptedGameCode al server
 
-			if (errorCode == Error::OK)
-			{
-				if (LaunchDefenses(AC) != Error::OK)
-				{
-					Logger::logf(Warning, " At least one technique experienced abnormal behavior when launching tests.");
-					return Error::CANT_APPLY_TECHNIQUE;
-				}
-			}
-			else
-			{
-				Logger::logf(Warning, "Couldn't start up, either the parent process was wrong or no auth server was present.");
-				return Error::CANT_CONNECT;
-			}
-		}break;
+		errorCode = Initialize(AC, gameCode, AC->GetConfig()->bNetworkingEnabled);
 
-		case CLIENT_EXIT:
+		if (errorCode == Error::OK)
 		{
-			Error err = Cleanup(AC); //clean up memory, shut down any threads
-
-			if (err == Error::OK) 			
+			if (LaunchDefenses(AC) != Error::OK)
 			{
-				errorCode = Error::OK;
+				Logger::logf(Warning, " At least one technique experienced abnormal behavior when launching tests.");
+				return Error::CANT_APPLY_TECHNIQUE;
 			}
-			else
-			{
-				errorCode = Error::NULL_MEMORY_REFERENCE;
-			}
-		} break;
+		}
+		else
+		{
+			Logger::logf(Warning, "Couldn't start up, either the parent process was wrong or no auth server was present.");
+			return Error::CANT_CONNECT;
+		}
+	}
+	break;
 
-		default:
-			Logger::logf(Warning, "Unrecognized dispatch code @ API::Dispatch: %d\n", code);
-			break;
+
+	case CLIENT_EXIT:
+	{
+		Error err = Cleanup(AC); //clean up memory, shut down any threads
+
+		if (err == Error::OK)
+		{
+			errorCode = Error::OK;
+		}
+		else
+		{
+			errorCode = Error::NULL_MEMORY_REFERENCE;
+		}
+	} break;
+
+	default:
+		Logger::logf(Warning, "Unrecognized dispatch code @ API::Dispatch: %d\n", code);
+		break;
 	};
 
 	return errorCode;

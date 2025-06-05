@@ -26,33 +26,13 @@
 #include "Common/sha256_hashes.hpp" // inserisci subito dopo gli altri include
 #include "Network/NetClient.hpp"
 #include <memory>
+#define OBFUSCATE(str) make_encrypted(L##str)
+#include "Common/SHA256Utils.hpp"
 
 // Usa direttamente le costanti importate
 // const std::string expectedUpdaterSha256 = ... // RIMUOVI queste righe
 // const std::string expectedDuffDllSha256 = ...
 // const std::string expectedX32Sha256 = ...
-
-
-std::string CalculateFileSHA256(const std::wstring& filePath) {
-    std::ifstream file(filePath, std::ios::binary);
-    if (!file)
-        return "";
-
-    SHA256 sha;
-    std::vector<uint8_t> buffer(4096);
-    while (file) {
-        file.read(reinterpret_cast<char*>(buffer.data()), buffer.size());
-        std::streamsize bytesRead = file.gcount();
-        if (bytesRead > 0)
-            sha.update(buffer.data(), static_cast<size_t>(bytesRead));
-    }
-    uint8_t* digest = sha.digest();
-    std::ostringstream oss;
-    for (int i = 0; i < 32; ++i)
-        oss << std::hex << std::setw(2) << std::setfill('0') << (int)digest[i];
-    delete[] digest;
-    return oss.str();
-}
 
 bool VerifySelfChecksum(const std::wstring& filePath, const std::string& expectedSha256) {
     std::string actual = CalculateFileSHA256(filePath);
@@ -253,23 +233,23 @@ int main(int argc, char** argv)
     const bool bUsingDriver = false; //signed driver for hybrid KM + UM anticheat. the KM driver will not be public, so make one yourself if you want to use this option
     const bool bEnableLogging = true; // set to false to not create a detailed AntiCheat log file on the user's system
 
-    constexpr auto parent_1 = make_encrypted(L"explorer.exe"); //in release build we can encrypt any compiled strings and decrypt them at runtime
+    constexpr auto parent_1 = OBFUSCATE("explorer.exe"); //in release build we can encrypt any compiled strings and decrypt them at runtime
     wchar_t decrypted_1[parent_1.getSize()] = {};
     parent_1.decrypt(decrypted_1);
 
-    constexpr auto parent_2 = make_encrypted(L"steam.exe");
+    constexpr auto parent_2 = OBFUSCATE("steam.exe");
     wchar_t decrypted_2[parent_2.getSize()] = {};
     parent_2.decrypt(decrypted_2);
 
-    constexpr auto parent_3 = make_encrypted(L"powershell.exe");
+    constexpr auto parent_3 = OBFUSCATE("powershell.exe");
     wchar_t decrypted_3[parent_3.getSize()] = {};
     parent_3.decrypt(decrypted_3);
 
-    constexpr auto parent_4 = make_encrypted(L"x32.exe");
+    constexpr auto parent_4 = OBFUSCATE("x32.exe");
     wchar_t decrypted_4[parent_4.getSize()] = {};
     parent_4.decrypt(decrypted_4);
 
-    constexpr auto parent_5 = make_encrypted(L"Updater.exe");
+    constexpr auto parent_5 = OBFUSCATE("Updater.exe");
     wchar_t decrypted_5[parent_5.getSize()] = {};
     parent_5.decrypt(decrypted_5);
 

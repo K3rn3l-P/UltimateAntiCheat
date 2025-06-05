@@ -170,9 +170,10 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\lol1\Documents\A-Best-Install
       <UACExecutionLevel>RequireAdministrator</UACExecutionLevel>
     </Link>
     <PostBuildEvent>
-      <Command>copy "$(ProjectDir)\splash.png" "$(ProjectDir)\x64\Release\splash.png"
-powershell -ExecutionPolicy Bypass -File "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\script\sha256_hashes.ps1"
-</Command>
+      <Command>if not exist "$(ProjectDir)x64\Release" mkdir "$(ProjectDir)x64\Release"
+xcopy /Y /I "$(ProjectDir)splash.png" "$(ProjectDir)x64\Release\"
+powershell -ExecutionPolicy Bypass -File "$(ProjectDir)script\sha256_hashes.ps1"
+powershell -ExecutionPolicy Bypass -File "$(ProjectDir)script\ExportAndCopyXorKey.ps1"</Command>
       <Message>Copy Splash Image</Message>
     </PostBuildEvent>
     <PreBuildEvent>
@@ -190,7 +191,9 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\lol1\Documents\A-Best-Install
     <ClCompile Include="API\API.cpp" />
     <ClCompile Include="Common\Logger.cpp" />
     <ClCompile Include="Common\SHA256.cpp" />
+    <ClCompile Include="Common\SHA256Utils.cpp" />
     <ClCompile Include="Common\Utility.cpp" />
+    <ClCompile Include="Common\XorKey.cpp" />
     <ClCompile Include="Detections.cpp" />
     <ClCompile Include="Environment\Services.cpp" />
     <ClCompile Include="EvidenceLocker.cpp" />
@@ -221,8 +224,10 @@ powershell -ExecutionPolicy Bypass -File "C:\Users\lol1\Documents\A-Best-Install
     <ClInclude Include="Common\Logger.hpp" />
     <ClInclude Include="Common\Settings.hpp" />
     <ClInclude Include="Common\SHA256.hpp" />
+    <ClInclude Include="Common\SHA256Utils.hpp" />
     <ClInclude Include="Common\sha256_hashes.hpp" />
     <ClInclude Include="Common\Utility.hpp" />
+    <ClInclude Include="Common\XorKey.hpp" />
     <ClInclude Include="Detections.hpp" />
     <ClInclude Include="Environment\Services.hpp" />
     <ClInclude Include="EvidenceLocker.hpp" />

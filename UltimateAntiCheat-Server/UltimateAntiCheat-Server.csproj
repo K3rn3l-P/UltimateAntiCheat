@@ -84,6 +84,7 @@
     <Compile Include="HexText.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Network\DatabaseLogger.cs" />
+    <Compile Include="Network\ExpectedHashes.cs" />
     <Compile Include="Network\Factory.cs" />
     <Compile Include="Network\Handlers.cs" />
     <Compile Include="Network\Opcodes.cs" />
@@ -92,6 +93,7 @@
     <Compile Include="Network\PacketWriter.cs" />
     <Compile Include="Network\Server.cs" />
     <Compile Include="Network\TcpProxy.cs" />
+    <Compile Include="Network\XorKey.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Utilities.cs" />
@@ -119,4 +121,7 @@
     <Folder Include="Keys\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>powershell -ExecutionPolicy Bypass -File "$(ProjectDir)..\script\sha256_hashes.ps1" &amp;&amp; powershell -ExecutionPolicy Bypass -File "$(ProjectDir)..\script\ExportAndCopyXorKey.ps1"</PostBuildEvent>
+  </PropertyGroup>
 </Project>

@@ -1,12 +1,23 @@
 #include "Packets.hpp"
 
-PacketWriter* Packets::Builder::ClientHello(string gameCode, string HWID, string hostname, string MACAddress)
+PacketWriter* Packets::Builder::ClientHello(
+	const std::string& encryptedGameCode,
+	const std::string& hardwareId,
+	const std::string& hostname,
+	const std::string& mac,
+	const std::string& exeHash)
 {
-	PacketWriter* p = new PacketWriter(Packets::Opcodes::CS_HELLO);
-	p->WriteString(gameCode.c_str());
-	p->WriteString(HWID.c_str());
-	p->WriteString(hostname.c_str());
-	p->WriteString(MACAddress.c_str());
+	PacketWriter* p = new PacketWriter(Opcodes::CS::CS_HELLO);
+	p->Write(static_cast<uint16_t>(encryptedGameCode.size()));
+	p->WriteNoLengthString(encryptedGameCode);
+	p->Write(static_cast<uint16_t>(hardwareId.size()));
+	p->WriteNoLengthString(hardwareId);
+	p->Write(static_cast<uint16_t>(hostname.size()));
+	p->WriteNoLengthString(hostname);
+	p->Write(static_cast<uint16_t>(mac.size()));
+	p->WriteNoLengthString(mac);
+	p->Write(static_cast<uint16_t>(exeHash.size()));
+	p->WriteNoLengthString(exeHash);
 	return p;
 }
 
@@ -50,7 +61,7 @@ PacketWriter* Packets::Builder::QueryMemory(byte* bytestring, int size)
 
 	for (int i = 0; i < size; i++)
 	{
-	    p->Write<BYTE>(bytestring[i]);
+		p->Write<BYTE>(bytestring[i]);
 	}
 
 	return p;
