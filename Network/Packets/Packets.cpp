@@ -75,3 +75,21 @@ PacketWriter* Packets::Builder::QueryMemory(byte* bytestring, int size)
 
     return p;
 }
+
+PacketWriter* Packets::Builder::ClientHashCheck(
+    const std::string& exeHash,
+    const std::string& updaterHash,
+    const std::string& duffDllHash,
+    const std::string& dacHash)
+{
+    PacketWriter* p = new PacketWriter(Opcodes::CS::CS_HASH_CHECK);
+    p->Write(static_cast<uint16_t>(exeHash.size()));
+    p->WriteNoLengthString(exeHash);
+    p->Write(static_cast<uint16_t>(updaterHash.size()));
+    p->WriteNoLengthString(updaterHash);
+    p->Write(static_cast<uint16_t>(duffDllHash.size()));
+    p->WriteNoLengthString(duffDllHash);
+    p->Write(static_cast<uint16_t>(dacHash.size()));
+    p->WriteNoLengthString(dacHash);
+    return p;
+}

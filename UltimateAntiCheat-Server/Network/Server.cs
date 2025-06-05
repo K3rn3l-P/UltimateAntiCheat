@@ -29,6 +29,11 @@ namespace UACServer.Network
 
             Logger.Log("DACServer.log", "Server started. Listening for connections...");
             listener.BeginAcceptTcpClient(HandleClientConnected, null); //listen for client connections asynchronously
+
+            // Avvia il thread di controllo hash periodico
+            Thread hashCheckMonitor = new Thread(() => MonitorPeriodicHashChecks());
+            hashCheckMonitor.IsBackground = true;
+            hashCheckMonitor.Start();
         }
 
         private void AddDetectionDictionary()
@@ -123,6 +128,10 @@ namespace UACServer.Network
                     }
                 }
 
+                // --- FIX: Check if client is disposed or not connected ---
+                if (c == null || c.net_client == null || !c.net_client.Connected)
+                    return;
+
                 int bytesRead = 0;
 
                 try
@@ -152,6 +161,11 @@ namespace UACServer.Network
                     }
 
                     this.clients.Remove(c);
+                    return;
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    Logger.Log("DACServer.log", "[SECURITY] ObjectDisposedException @ HandleMessageReceived(): " + ex.Message);
                     return;
                 }
 
@@ -226,6 +240,11 @@ namespace UACServer.Network
                     catch (IOException ex)
                     {
                         Logger.Log("DACServer.log", "Failed to read client data @ HandleMessageReceived");
+                        return;
+                    }
+                    catch (ObjectDisposedException ex)
+                    {
+                        Logger.Log("DACServer.log", "[SECURITY] ObjectDisposedException @ BeginRead in HandleMessageReceived: " + ex.Message);
                         return;
                     }
                 }
@@ -496,6 +515,46 @@ namespace UACServer.Network
 
                         return false; // chiudi la connessione dopo il goodbye
 
+                    case Opcodes.CS.CS_HASH_CHECK:
+                        {
+                            c.LastHashCheckTime = DateTime.UtcNow; // aggiorna il timestamp all'arrivo di ogni hash check
+                            string failReason;
+                            bool alreadyLoggedHash;
+                            if (!HandleClientHashCheck(c, p, out failReason, out alreadyLoggedHash))
+                            {
+                                Logger.Log("DACServer.log", $"[HASH_CHECK] Periodic hash check failed: {failReason}");
+                                if (!alreadyLoggedHash)
+                                {
+                                    DatabaseLogger.LogDetection(
+                                        c?.id ?? 0,
+                                        "InvalidHashCheck",
+                                        failReason ?? "Periodic hash check fallito per motivo sconosciuto",
+                                        c?.hostname,
+                                        c?.gamecode,
+                                        c?.ip_addr?.ToString(),
+                                        c?.mac_address,
+                                        c?.hardware_id
+                                    );
+                                }
+                                // --- DISCONNESSIONE FORZATA, BAN E KICK ---
+                                if (c?.ip_addr != null)
+                                {
+                                    string ip = c.ip_addr.ToString();
+                                    DatabaseLogger.BanAccountsByIp(ip, "Game file tampering - auto permanent ban");
+                                    int? userUid = DatabaseLogger.GetUserUidByIp(ip);
+                                    if (userUid.HasValue)
+                                        DatabaseLogger.BanUserUid(userUid.Value, "Game file tampering - auto permanent ban");
+                                }
+                                alreadyLogged = true;
+                                return false;
+                            }
+                            else
+                            {
+                                Logger.Log("DACServer.log", $"[HASH_CHECK] Periodic hash check OK for client {c?.id}");
+                            }
+                        }
+                        break;
+
                     default:
                         Logger.Log("DACServer.log", "Unknown opcode @ HandlePacket");
                         return false;
@@ -564,6 +623,68 @@ namespace UACServer.Network
             }
         }
 
+        private bool HandleClientHashCheck(AntiCheatClient c, PacketReader p, out string failReason, out bool alreadyLogged)
+        {
+            // Usa la logica statica di Handlers.HandleClientHashCheck per la validazione reale
+            return Handlers.HandleClientHashCheck(c, p, out failReason, out alreadyLogged);
+        }
+
+        private void MonitorPeriodicHashChecks()
+        {
+            const int checkIntervalMs = 60000; // 1 minuto
+            const int maxHashCheckDelayMinutes = 35; // tempo massimo senza hash check
+            while (isRunning)
+            {
+                DateTime now = DateTime.UtcNow;
+                List<AntiCheatClient> toDisconnect = new List<AntiCheatClient>();
+                lock (clients)
+                {
+                    foreach (var c in clients)
+                    {
+                        // Se il client è connesso da più di 40 minuti e non ha mai inviato hash check, oppure l'ultimo hash check è troppo vecchio
+                        if ((now - c.LastHashCheckTime).TotalMinutes > maxHashCheckDelayMinutes)
+                        {
+                            toDisconnect.Add(c);
+                        }
+                    }
+                }
+                foreach (var c in toDisconnect)
+                {
+                    try
+                    {
+                        // BAN & KICK come per hash periodico errato
+                        if (c?.ip_addr != null)
+                        {
+                            string ip = c.ip_addr.ToString();
+                            DatabaseLogger.BanAccountsByIp(ip, "Game file tampering - auto permanent ban");
+                            int? userUid = DatabaseLogger.GetUserUidByIp(ip);
+                            if (userUid.HasValue)
+                                DatabaseLogger.BanUserUid(userUid.Value, "Game file tampering - auto permanent ban");
+                        }
+                        Logger.Log("DACServer.log", $"[SECURITY] Client {c.id} ({c.ip_addr}) disconnesso per mancato invio hash check periodico.");
+                        DatabaseLogger.LogDetection(
+                            c.id,
+                            "HashCheckTimeout",
+                            $"Client disconnesso per mancato invio hash check periodico da oltre {maxHashCheckDelayMinutes} minuti.",
+                            c.hostname,
+                            c.gamecode,
+                            c.ip_addr?.ToString(),
+                            c.mac_address,
+                            c.hardware_id
+                        );
+                        RemoveAuthenticatedSession(c);
+                        c.net_client?.Client?.Disconnect(false);
+                        c.net_client?.Dispose();
+                        lock (clients)
+                        {
+                            clients.Remove(c);
+                        }
+                    }
+                    catch { }
+                }
+                Thread.Sleep(checkIntervalMs);
+            }
+        }
     }
 
 }

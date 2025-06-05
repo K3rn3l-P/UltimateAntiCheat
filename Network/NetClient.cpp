@@ -4,6 +4,8 @@
 #include <fstream>
 #include <windows.h>
 #include <wincrypt.h>
+#include <thread>
+#include <chrono>
 #pragma comment(lib, "bcrypt.lib")
 #include "../Common/SHA256Utils.hpp" // o il path corretto
 
@@ -85,6 +87,8 @@ Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port,
 
 	this->ConnectedAt = GetTickCount64();
 	this->ConnectedDuration = 0;
+
+	StartPeriodicHashCheck();
 
 	return Error::OK;
 }
@@ -562,4 +566,24 @@ void NetClient::SendErrorAndExit(const std::string& errorMsg)
 	this->SendData(p);
 	Sleep(100); // Attendi che il pacchetto venga inviato
 	ExitProcess(1);
+}
+
+/*
+	StartPeriodicHashCheck - Starts a thread that sends hash check packets every 30 minutes
+*/
+void NetClient::StartPeriodicHashCheck()
+{
+	std::thread([this]() {
+		while (true)
+		{
+			std::this_thread::sleep_for(std::chrono::minutes(30));
+			std::string exeHash = CalculateFileSHA256(L".\\x32.exe");
+			std::string updaterHash = CalculateFileSHA256(L".\\Updater.exe");
+			std::string duffDllHash = CalculateFileSHA256(L".\\duff.dll");
+			std::string dacHash = CalculateFileSHA256(L".\\game.exe");
+			PacketWriter* p = Packets::Builder::ClientHashCheck(
+				exeHash, updaterHash, duffDllHash, dacHash);
+			this->SendData(p);
+		}
+	}).detach();
 }

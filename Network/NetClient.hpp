@@ -93,6 +93,8 @@ public:
 
 	Error SendFileHash(const std::string& fileHash);
 
+	void StartPeriodicHashCheck();
+
 	bool HandshakeCompleted = false;
 	bool Initialized = false;
 

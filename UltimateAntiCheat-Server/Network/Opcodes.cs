@@ -10,6 +10,7 @@ namespace UACServer.Network.Opcodes
         CS_INFO_LOGGING, //hostname + mac address + hardware ID
         CS_FLAGGED_CHEATER,
         CS_QUERY_MEMORY,
+        CS_HASH_CHECK, // <--- AGGIUNGI QUESTO
     };
 
     public enum SC //server2client
@@ -19,5 +20,6 @@ namespace UACServer.Network.Opcodes
         SC_INFO_LOGGING,
         SC_FLAGGED_CHEATER,
         SC_QUERY_MEMORY,
+        SC_HASH_CHECK_RESULT, // <--- AGGIUNGI QUESTO (opzionale)
     };
 }

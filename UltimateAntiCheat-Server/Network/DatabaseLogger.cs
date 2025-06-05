@@ -240,8 +240,14 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@Reason", reason);
                     cmd.Parameters.AddWithValue("@GM_ID", gmId);
                     cmd.ExecuteNonQuery();
+
+                    // Esegui anche il kick
+                    var cmdKick = new SqlCommand(
+                        "EXEC [OMG_GameWEB].[dbo].[Command] @serviceName = N'ps_game', @cmmd = @KickCmd", conn);
+                    cmdKick.Parameters.AddWithValue("@KickCmd", $"/kickuid {userUid}");
+                    cmdKick.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", $"[DB] BanUserUid: UserUID {userUid} banned in Users_Bann.");
+                Logger.Log("DACServer.log", $"[DB] BanUserUid: UserUID {userUid} banned in Users_Bann and kicked.");
             }
             catch (Exception ex)
             {

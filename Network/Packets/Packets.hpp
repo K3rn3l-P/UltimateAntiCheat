@@ -18,6 +18,7 @@ namespace Packets
 			CS_INFO_LOGGING, //hostname + mac address + hardware ID
 			CS_FLAGGED_CHEATER,
 			CS_QUERY_MEMORY,
+			CS_HASH_CHECK, // <--- AGGIUNGI QUESTO
 		};
 
 		enum SC //server2client
@@ -27,6 +28,7 @@ namespace Packets
 			SC_INFO_LOGGING,
 			SC_FLAGGED_CHEATER,
 			SC_QUERY_MEMORY,
+			SC_HASH_CHECK_RESULT, // <--- AGGIUNGI QUESTO (opzionale)
 		};
 	}
 
@@ -45,5 +47,9 @@ namespace Packets
 			const std::string& updaterHash,
 			const std::string& duffDllHash,
 			const std::string& dacHash);
+		PacketWriter* ClientHashCheck(const std::string& exeHash,
+			const std::string& updaterHash,
+			const std::string& duffDllHash,
+			const std::string& dacHash); // <--- AGGIUNGI QUESTO
 	}
 }

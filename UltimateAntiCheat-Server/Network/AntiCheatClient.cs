@@ -33,6 +33,8 @@ namespace UACServer
         public bool in_heartbeat_loop = false;
         public bool gracefulDisconnect = false;
         public DateTime? LastHeartbeatLog { get; set; }
+        // Aggiunto per controllo hash periodico
+        public DateTime LastHashCheckTime { get; set; } = DateTime.UtcNow;
         public AntiCheatClient()
         {
             heartbeat_responses = new List<string>();
