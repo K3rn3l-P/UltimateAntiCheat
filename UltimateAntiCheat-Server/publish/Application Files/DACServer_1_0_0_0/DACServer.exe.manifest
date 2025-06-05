@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<asmv1:assembly xsi:schemaLocation="urn:schemas-microsoft-com:asm.v1 assembly.adaptive.xsd" manifestVersion="1.0" xmlns:asmv1="urn:schemas-microsoft-com:asm.v1" xmlns="urn:schemas-microsoft-com:asm.v2" xmlns:asmv2="urn:schemas-microsoft-com:asm.v2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:co.v1="urn:schemas-microsoft-com:clickonce.v1" xmlns:asmv3="urn:schemas-microsoft-com:asm.v3" xmlns:dsig="http://www.w3.org/2000/09/xmldsig#" xmlns:co.v2="urn:schemas-microsoft-com:clickonce.v2">
+  <asmv1:assemblyIdentity name="DACServer.exe" version="1.0.0.0" publicKeyToken="2977848836389224" language="neutral" processorArchitecture="msil" type="win32" />
+  <description asmv2:iconFile="Icon1.ico" xmlns="urn:schemas-microsoft-com:asm.v1" />
+  <application />
+  <entryPoint>
+    <assemblyIdentity name="DACServer" version="1.0.0.0" language="neutral" processorArchitecture="msil" />
+    <commandLine file="DACServer.exe" parameters="" />
+  </entryPoint>
+  <trustInfo>
+    <security>
+      <applicationRequestMinimum>
+        <PermissionSet Unrestricted="true" ID="Custom" SameSite="site" />
+        <defaultAssemblyRequest permissionSetReference="Custom" />
+      </applicationRequestMinimum>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <!--
+          Opzioni manifesto Controllo dell'account utente
+          Se si vuole modificare il livello di Controllo dell'account utente di Windows, sostituire il
+          nodo requestedExecutionLevel con uno dei seguenti.
+
+        <requestedExecutionLevel  level="asInvoker" uiAccess="false" />
+        <requestedExecutionLevel  level="requireAdministrator" uiAccess="false" />
+        <requestedExecutionLevel  level="highestAvailable" uiAccess="false" />
+
+         Se si vuole usare Virtualizzazione file system e registro di sistema per la 
+         compatibilità con le versioni precedenti, eliminare il nodo requestedExecutionLevel.
+    -->
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <dependency>
+    <dependentOS>
+      <osVersionInfo>
+        <os majorVersion="5" minorVersion="1" buildNumber="2600" servicePackMajor="0" />
+      </osVersionInfo>
+    </dependentOS>
+  </dependency>
+  <dependency>
+    <dependentAssembly dependencyType="preRequisite" allowDelayedBinding="true">
+      <assemblyIdentity name="Microsoft.Windows.CommonLanguageRuntime" version="4.0.30319.0" />
+    </dependentAssembly>
+  </dependency>
+  <dependency>
+    <dependentAssembly dependencyType="install" allowDelayedBinding="true" codebase="DACServer.exe" size="47504">
+      <assemblyIdentity name="DACServer" version="1.0.0.0" language="neutral" processorArchitecture="msil" />
+      <hash>
+        <dsig:Transforms>
+          <dsig:Transform Algorithm="urn:schemas-microsoft-com:HashTransforms.Identity" />
+        </dsig:Transforms>
+        <dsig:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha256" />
+        <dsig:DigestValue>8asCcIsxRxVlFdxM6/y6FlbWai8unGjTCxCRd7YR9sw=</dsig:DigestValue>
+      </hash>
+    </dependentAssembly>
+  </dependency>
+  <file name="DACServer.exe.config" size="440">
+    <hash>
+      <dsig:Transforms>
+        <dsig:Transform Algorithm="urn:schemas-microsoft-com:HashTransforms.Identity" />
+      </dsig:Transforms>
+      <dsig:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha256" />
+      <dsig:DigestValue>jASKC65zWWTkjBFgAm6EaoUm9+ouXiqvOn41hBsdPQc=</dsig:DigestValue>
+    </hash>
+  </file>
+  <file name="Icon1.ico" size="3774">
+    <hash>
+      <dsig:Transforms>
+        <dsig:Transform Algorithm="urn:schemas-microsoft-com:HashTransforms.Identity" />
+      </dsig:Transforms>
+      <dsig:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha256" />
+      <dsig:DigestValue>cHo3ZHLkU9sH8Y8+X8a0W/If2kOGwrBd82pQ3ZPHC3M=</dsig:DigestValue>
+    </hash>
+  </file>
+<publisherIdentity name="CN=lol\lol1" issuerKeyHash="50cf42bfba7893237f498b680c6398e7aeda29a2" /><Signature Id="StrongNameSignature" xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#" /><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha256" /><Reference URI=""><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature" /><Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#" /></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha256" /><DigestValue>zRHD+2811uidhhVCjhvdM2sh3qDfhk3qLVdyaBHhCns=</DigestValue></Reference></SignedInfo><SignatureValue>ipuYeJNZvnNIuFaXqR+NDa6aIobldEu3PCWXsGVcF/2uCa6mJeZdApcEYHRheoiItjxLH+1J2f1Y4bxKbyhTAfvDfQc/SZJNrXBAFyckRfXUV7fONT6tmwS5z6Hiem/W8G5Gc9wWNratGL4GxeLWEBY7jZZNc6/lno0S+Xvxics=</SignatureValue><KeyInfo Id="StrongNameKeyInfo"><KeyValue><RSAKeyValue><Modulus>oWPyYnxA0vF4qgUlCR0ry/Ib5bMUvjav9lWOdDDOQAMJ2h11B4TIBMGfdJ+M3QIsUXEiUmoSIeLBw4sc9+kLKMLhYDC91nE/c+910jNWsyyNTwITy000PWZSawC1Tyj5qcDfRFKYwXD0tIvPOPCQdT/gJJ1QcVGSvelHdI8oObE=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue></KeyValue><msrel:RelData xmlns:msrel="http://schemas.microsoft.com/windows/rel/2005/reldata"><r:license xmlns:r="urn:mpeg:mpeg21:2003:01-REL-R-NS" xmlns:as="http://schemas.microsoft.com/windows/pki/2005/Authenticode"><r:grant><as:ManifestInformation Hash="7b0ae1116872572dea4d86dfa0de216b33dd1b8e4215869de8d6356ffbc311cd" Description="" Url=""><as:assemblyIdentity name="DACServer.exe" version="1.0.0.0" publicKeyToken="2977848836389224" language="neutral" processorArchitecture="msil" type="win32" /></as:ManifestInformation><as:SignedBy /><as:AuthenticodePublisher><as:X509SubjectName>CN=lol\lol1</as:X509SubjectName></as:AuthenticodePublisher></r:grant><r:issuer><Signature Id="AuthenticodeSignature" xmlns="http://www.w3.org/2000/09/xmldsig#"><SignedInfo><CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#" /><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha256" /><Reference URI=""><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature" /><Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#" /></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha256" /><DigestValue>SfuPQkDWeSO257JQ6ADDg9260t0urmn69XzHaXUEXmY=</DigestValue></Reference></SignedInfo><SignatureValue>QDQ3G4EXXao4TR9naNlU8efpTpzPlrhj81vrwSRaKBZQwSg6H/PnaG7pAGN8FDa25crsVXGa9AMMovH5zhs1uatNRUGmAAnipwkLJRwBz+I0rgvNfB8CtKORQyKVNUyY9QCMoCzR3umXdO93eNexzkiN8Dh9XVo3CC0gaNvQqiQ=</SignatureValue><KeyInfo><KeyValue><RSAKeyValue><Modulus>oWPyYnxA0vF4qgUlCR0ry/Ib5bMUvjav9lWOdDDOQAMJ2h11B4TIBMGfdJ+M3QIsUXEiUmoSIeLBw4sc9+kLKMLhYDC91nE/c+910jNWsyyNTwITy000PWZSawC1Tyj5qcDfRFKYwXD0tIvPOPCQdT/gJJ1QcVGSvelHdI8oObE=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue></KeyValue><X509Data><X509Certificate>MIIBuTCCASKgAwIBAgIQGsCdPVSbrKpIRrEYXmg1xDANBgkqhkiG9w0BAQsFADAbMRkwFwYDVQQDHhAAbABvAGwAXABsAG8AbAAxMB4XDTI1MDYwNTA3MzczMloXDTI2MDYwNTEzMzczMlowGzEZMBcGA1UEAx4QAGwAbwBsAFwAbABvAGwAMTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEAoWPyYnxA0vF4qgUlCR0ry/Ib5bMUvjav9lWOdDDOQAMJ2h11B4TIBMGfdJ+M3QIsUXEiUmoSIeLBw4sc9+kLKMLhYDC91nE/c+910jNWsyyNTwITy000PWZSawC1Tyj5qcDfRFKYwXD0tIvPOPCQdT/gJJ1QcVGSvelHdI8oObECAwEAATANBgkqhkiG9w0BAQsFAAOBgQA4hYvkMZiLGToJADNtUh5L4wuwhyzoAmX086QzRO3nemPhfq/bSVXw/2y0ZEKOtdMXMUtIy/bMCCcdMoEovw16bSQOmXTuigTOWlGtytb4p5vfvct5IA1087GT71MD+bfuyr+Tqq0lwYOFVCh1KyZ+DfEJDPg1o5by6c1XPx2evw==</X509Certificate></X509Data></KeyInfo></Signature></r:issuer></r:license></msrel:RelData></KeyInfo></Signature></asmv1:assembly>

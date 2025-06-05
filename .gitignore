@@ -3,7 +3,12 @@
 *.lo
 *.o
 *.obj
+*.iobj
 *.tlog
+*.pdb
+*.ipdb
+*.log
+*.res
 /x64
 /.vs
 /.vscode
