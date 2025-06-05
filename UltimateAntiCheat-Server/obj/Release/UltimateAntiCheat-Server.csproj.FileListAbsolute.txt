@@ -5,3 +5,11 @@ C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiC
 C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat-Server\obj\Release\UltimateAntiCheat-Server.csproj.CoreCompileInputs.cache
 C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat-Server\obj\Release\DACServer.exe
 C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat-Server\obj\Release\DACServer.pdb
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\bin\Release\DACServer.exe.config
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\bin\Release\DACServer.exe
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\bin\Release\DACServer.pdb
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\obj\Release\UltimateAntiCheat-Server.csproj.AssemblyReference.cache
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\obj\Release\DACServer.exe.config
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\obj\Release\UltimateAntiCheat-Server.csproj.CoreCompileInputs.cache
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\obj\Release\DACServer.exe
+C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\obj\Release\DACServer.pdb
