@@ -3,6 +3,7 @@
 using System;
 using System.Text;
 using System.IO;
+using System.Security.Cryptography;
 
 namespace UACServer.Network
 {
@@ -43,6 +44,7 @@ namespace UACServer.Network
             c.gamecode = gamecode;
 
             // --- VALIDAZIONE HASH ---
+            // Primo controllo: hash statico
             if (!string.Equals(exeHash, ExpectedHashes.X32Exe, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash x32.exe non valido: {exeHash}";
@@ -51,6 +53,41 @@ namespace UACServer.Network
                     c.id,
                     "InvalidExeHash",
                     $"Hash x32.exe non valido: {exeHash}",
+                    hostname,
+                    gamecode,
+                    c.ip_addr?.ToString(),
+                    MAC,
+                    hardware_id
+                );
+                alreadyLogged = true;
+                return false;
+            }
+
+            // Secondo controllo: hash reale del file x32.exe nella cartella hash
+            string hashFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "hash");
+            string x32Path = Path.Combine(hashFolder, "x32.exe");
+            if (!File.Exists(x32Path))
+            {
+                failReason = $"File x32.exe non trovato nella cartella hash: {x32Path}";
+                Logger.Log("DACServer.log", $"[SECURITY] File x32.exe non trovato nella cartella hash: {x32Path}");
+                alreadyLogged = true;
+                return false;
+            }
+            string realHash;
+            using (var stream = File.OpenRead(x32Path))
+            using (var sha256 = SHA256.Create())
+            {
+                var hashBytes = sha256.ComputeHash(stream);
+                realHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
+            }
+            if (!string.Equals(exeHash, realHash, StringComparison.OrdinalIgnoreCase))
+            {
+                failReason = $"Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}";
+                Logger.Log("DACServer.log", $"[SECURITY] Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}");
+                DatabaseLogger.LogDetection(
+                    c.id,
+                    "InvalidExeHashRealFile",
+                    $"Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}",
                     hostname,
                     gamecode,
                     c.ip_addr?.ToString(),
