@@ -9,6 +9,8 @@
 *.ipdb
 *.log
 *.res
+*.cache
+*.recipe
 /x64
 /.vs
 /.vscode
