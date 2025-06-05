@@ -32,7 +32,9 @@
 
 # Visual Studio and VSCode
 /.vs/
+**/.vs/
 /.vscode/
+**/.vscode/
 *.user
 *.suo
 
