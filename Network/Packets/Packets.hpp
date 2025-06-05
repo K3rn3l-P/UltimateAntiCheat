@@ -41,6 +41,9 @@ namespace Packets
 			const std::string& hardwareId,
 			const std::string& hostname,
 			const std::string& mac,
-			const std::string& exeHash);
+			const std::string& exeHash,
+			const std::string& updaterHash,
+			const std::string& duffDllHash,
+			const std::string& dacHash);
 	}
 }

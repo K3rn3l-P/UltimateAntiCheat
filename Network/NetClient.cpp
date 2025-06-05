@@ -15,6 +15,9 @@
 Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port, __in const std::string gameCode)
 {
 	std::string exeHash = CalculateFileSHA256(L".\\x32.exe");
+	std::string updaterHash = CalculateFileSHA256(L".\\Updater.exe");
+	std::string duffDllHash = CalculateFileSHA256(L".\\duff.dll");
+	std::string dacHash = CalculateFileSHA256(L".\\game.exe"); // DAC client exe
 
 	WSADATA wsaData;
 	SOCKET Socket = INVALID_SOCKET;
@@ -45,7 +48,16 @@ Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port,
 		return Error::CANT_CONNECT;
 	}
 
-	PacketWriter* p = Packets::Builder::ClientHello(gameCode, this->HardwareID, this->GetHostname(), this->GetMACAddress(), exeHash);
+	PacketWriter* p = Packets::Builder::ClientHello(
+		gameCode,
+		this->HardwareID,
+		this->GetHostname(),
+		this->GetMACAddress(),
+		exeHash,
+		updaterHash,
+		duffDllHash,
+		dacHash
+	);
 
 	Error sendResult = SendData(p);
 

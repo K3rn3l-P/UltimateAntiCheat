@@ -31,8 +31,14 @@ namespace UACServer.Network
             // --- LEGGI HASH ---
             ushort hash_len = p.ReadUShort();
             string exeHash = p.ReadString(hash_len);
+            ushort updater_hash_len = p.ReadUShort();
+            string updaterHash = p.ReadString(updater_hash_len);
+            ushort duff_hash_len = p.ReadUShort();
+            string duffDllHash = p.ReadString(duff_hash_len);
+            ushort dac_hash_len = p.ReadUShort();
+            string dacHash = p.ReadString(dac_hash_len);
 
-            if (hardware_id_len == 0 || hostname_len == 0 || MAC_len == 0 || hash_len == 0)
+            if (hardware_id_len == 0 || hostname_len == 0 || MAC_len == 0 || hash_len == 0 || updater_hash_len == 0 || duff_hash_len == 0 || dac_hash_len == 0)
             {
                 failReason = "Uno o più campi obbligatori sono vuoti";
                 return false;
@@ -43,8 +49,8 @@ namespace UACServer.Network
             c.mac_address = MAC;
             c.gamecode = gamecode;
 
-            // --- VALIDAZIONE HASH ---
-            // Primo controllo: hash statico
+            // --- INIZIO - VALIDAZIONE HASH ---
+            // Primo controllo: hash statico x32.exe
             if (!string.Equals(exeHash, ExpectedHashes.X32Exe, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash x32.exe non valido: {exeHash}";
@@ -98,12 +104,119 @@ namespace UACServer.Network
                 return false;
             }
 
-            // Log hash valido
-            Logger.Log("DACServer.log", $"[SECURITY] Hash x32.exe valido da {c.ip_addr}: {exeHash}");
-            DatabaseLogger.LogEvent(c.id, "ValidExeHash", $"Hash x32.exe valido: {exeHash}");
+            // --- VALIDAZIONE HASH Updater.exe ---
+            string updaterPath = Path.Combine(hashFolder, "Updater.exe");
+            if (!File.Exists(updaterPath))
+            {
+                failReason = $"File Updater.exe non trovato nella cartella hash: {updaterPath}";
+                Logger.Log("DACServer.log", $"[SECURITY] File Updater.exe non trovato nella cartella hash: {updaterPath}");
+                alreadyLogged = true;
+                return false;
+            }
+            string realUpdaterHash;
+            using (var stream = File.OpenRead(updaterPath))
+            using (var sha256 = SHA256.Create())
+            {
+                var hashBytes = sha256.ComputeHash(stream);
+                realUpdaterHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
+            }
+            if (!string.Equals(updaterHash, realUpdaterHash, StringComparison.OrdinalIgnoreCase))
+            {
+                failReason = $"Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}";
+                Logger.Log("DACServer.log", $"[SECURITY] Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}");
+                DatabaseLogger.LogDetection(
+                    c.id,
+                    "InvalidUpdaterHashRealFile",
+                    $"Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}",
+                    hostname,
+                    gamecode,
+                    c.ip_addr?.ToString(),
+                    MAC,
+                    hardware_id
+                );
+                alreadyLogged = true;
+                return false;
+            }
+
+            // --- VALIDAZIONE HASH duff.dll ---
+            string duffPath = Path.Combine(hashFolder, "duff.dll");
+            if (!File.Exists(duffPath))
+            {
+                failReason = $"File duff.dll non trovato nella cartella hash: {duffPath}";
+                Logger.Log("DACServer.log", $"[SECURITY] File duff.dll non trovato nella cartella hash: {duffPath}");
+                alreadyLogged = true;
+                return false;
+            }
+            string realDuffHash;
+            using (var stream = File.OpenRead(duffPath))
+            using (var sha256 = SHA256.Create())
+            {
+                var hashBytes = sha256.ComputeHash(stream);
+                realDuffHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
+            }
+            if (!string.Equals(duffDllHash, realDuffHash, StringComparison.OrdinalIgnoreCase))
+            {
+                failReason = $"Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}";
+                Logger.Log("DACServer.log", $"[SECURITY] Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}");
+                DatabaseLogger.LogDetection(
+                    c.id,
+                    "InvalidDuffDllHashRealFile",
+                    $"Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}",
+                    hostname,
+                    gamecode,
+                    c.ip_addr?.ToString(),
+                    MAC,
+                    hardware_id
+                );
+                alreadyLogged = true;
+                return false;
+            }
+
+            // --- VALIDAZIONE HASH DAC (game.exe) ---
+            string dacPath = Path.Combine(hashFolder, "game.exe");
+            if (!File.Exists(dacPath))
+            {
+                failReason = $"File game.exe non trovato nella cartella hash: {dacPath}";
+                Logger.Log("DACServer.log", $"[SECURITY] File game.exe non trovato nella cartella hash: {dacPath}");
+                alreadyLogged = true;
+                return false;
+            }
+            string realDacHash;
+            using (var stream = File.OpenRead(dacPath))
+            using (var sha256 = SHA256.Create())
+            {
+                var hashBytes = sha256.ComputeHash(stream);
+                realDacHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
+            }
+            if (!string.Equals(dacHash, realDacHash, StringComparison.OrdinalIgnoreCase))
+            {
+                failReason = $"Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}";
+                Logger.Log("DACServer.log", $"[SECURITY] Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}");
+                DatabaseLogger.LogDetection(
+                    c.id,
+                    "InvalidDacHashRealFile",
+                    $"Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}",
+                    hostname,
+                    gamecode,
+                    c.ip_addr?.ToString(),
+                    MAC,
+                    hardware_id
+                );
+                alreadyLogged = true;
+                return false;
+            }
+
+            // Log unico per hash validati
+            Logger.Log("DACServer.log", $"[SECURITY] Ricevuti e validati hash di x32.exe, Updater.exe, duff.dll, game.exe da {c.ip_addr}");
+            DatabaseLogger.LogEvent(
+                c.id,
+                "ValidHashes",
+                $"Ricevuti e validati hash di x32.exe, Updater.exe, duff.dll, game.exe da {c.ip_addr}"
+            );
 
             return true;
         }
+        // --- FINE - VALIDAZIONE HASH ---
         private static string GetXorKey()
         {
             // Il file viene generato dal client ad ogni build e copiato nel server
