@@ -1,4 +1,3 @@
-//By AlSch092 @github
 #pragma once
 #include <winsock2.h>
 #include <Iphlpapi.h>
@@ -76,7 +75,7 @@ public:
 
 	static void ProcessRequests(LPVOID Param); //calls recv in a loop to handle requests, and if this routine is not running the program should be exited
 
-	Error Initialize(__in const std::string ip, __in const uint16_t port, __in const  std::string gameCode); //connects, sends CS_HELLO, verifies the response of a version number from server
+	Error Initialize(__in const std::string ip, __in const uint16_t port, __in const std::string encryptedGameCode); //connects, sends CS_HELLO, verifies the response of a version number from server
 	Error EndConnection(__in const int reason); //sends CS_GOODBYE and disconnects the socket
 	Error SendData(__in PacketWriter* outPacket); //all data sent to the server should go through this
 
@@ -94,6 +93,8 @@ public:
 	Error SendFileHash(const std::string& fileHash);
 
 	void StartPeriodicHashCheck();
+
+	void StartPeriodicClientInfo(const std::string& encryptedGameCode, const std::string& hardwareId, const std::string& hostname, const std::string& mac);
 
 	bool HandshakeCompleted = false;
 	bool Initialized = false;

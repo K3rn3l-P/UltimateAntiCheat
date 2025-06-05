@@ -7,6 +7,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Collections.Concurrent; // Aggiungi questa riga
+using UACServer.Network.Opcodes;
+using Newtonsoft.Json;
 
 namespace UACServer.Network
 {
@@ -157,7 +159,8 @@ namespace UACServer.Network
                             c.hardware_id
                         );
                         DatabaseLogger.LogLogoutEvent(c.id, DateTime.Now);
-                        RemoveAuthenticatedSession(c); // <-- AGGIUNTO QUI
+                        RemoveAuthenticatedSession(c);
+                        Handlers.RemoveSessionFile(c);
                     }
 
                     this.clients.Remove(c);
@@ -195,6 +198,7 @@ namespace UACServer.Network
                             );
                         }
                         RemoveAuthenticatedSession(c);
+                        Handlers.RemoveSessionFile(c);
                         c?.net_client?.Client?.Disconnect(false);
                         c?.net_client?.Dispose();
                         return;
@@ -255,6 +259,7 @@ namespace UACServer.Network
                     string removedGamecode;
                     AnticheatServer.AuthenticatedSessions.TryRemove(ip, out removedGamecode);
                     RemoveAuthenticatedSession(c);
+                    Handlers.RemoveSessionFile(c);
                     Logger.Log("DACServer.log", $"Client {((IPEndPoint)client.Client.RemoteEndPoint).Address} disconnected (possibly due to invalid signature or malformed packet).");
 
 
@@ -287,6 +292,8 @@ namespace UACServer.Network
                             );
                             DatabaseLogger.LogLogoutEvent(toRemove.id, DateTime.Now);
                         }
+                        RemoveAuthenticatedSession(toRemove);
+                        Handlers.RemoveSessionFile(toRemove);
                         clients.Remove(toRemove);
                     }
 
@@ -511,8 +518,10 @@ namespace UACServer.Network
                         c.gracefulDisconnect = true;
                         Logger.Log("DACServer.log", $"Client {c.id} disconnected gracefully.");
                         DatabaseLogger.LogLogoutEvent(c.id, DateTime.Now);
-                        RemoveAuthenticatedSession(c); // <-- AGGIUNTO QUI
-
+                        RemoveAuthenticatedSession(c);
+                        Handlers.RemoveSessionFile(c);
+                        c?.net_client?.Client?.Disconnect(false);
+                        c?.net_client?.Dispose();
                         return false; // chiudi la connessione dopo il goodbye
 
                     case Opcodes.CS.CS_HASH_CHECK:
@@ -551,6 +560,54 @@ namespace UACServer.Network
                             else
                             {
                                 Logger.Log("DACServer.log", $"[HASH_CHECK] Periodic hash check OK for client {c?.id}");
+                            }
+                        }
+                        break;
+
+                    case Opcodes.CS.CS_CLIENTINFO_PERIODIC:
+                        {
+                            string failReason;
+                            bool alreadyLoggedInfo;
+                            if (!Handlers.HandleClientInfoPeriodic(c, p, out failReason, out alreadyLoggedInfo))
+                            {
+                                Logger.Log("DACServer.log", $"[INFO_CHECK] Periodic client info failed: {failReason}");
+                                if (!alreadyLoggedInfo)
+                                {
+                                    DatabaseLogger.LogDetection(
+                                        c?.id ?? 0,
+                                        "InvalidClientInfoPeriodic",
+                                        failReason ?? "Periodic client info fallito per motivo sconosciuto",
+                                        c?.hostname,
+                                        c?.gamecode,
+                                        c?.ip_addr?.ToString(),
+                                        c?.mac_address,
+                                        c?.hardware_id
+                                    );
+                                }
+                                // Ban & kick
+                                if (c?.ip_addr != null)
+                                {
+                                    string ip = c.ip_addr.ToString();
+                                    DatabaseLogger.BanAccountsByIp(ip, "Client info mismatch - auto permanent ban");
+                                    int? userUid = DatabaseLogger.GetUserUidByIp(ip);
+                                    if (userUid.HasValue)
+                                        DatabaseLogger.BanUserUid(userUid.Value, "Client info mismatch - auto permanent ban");
+                                }
+                                alreadyLogged = true;
+                                return false;
+                            }
+                            else
+                            {
+                                // Aggiorna last write time del file session
+                                string sessionDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session");
+                                if (!Directory.Exists(sessionDir))
+                                    Directory.CreateDirectory(sessionDir);
+                                string safeIp = SanitizeFileName(c.ip_addr?.ToString());
+                                string safeGameCode = SanitizeFileName(c.gamecode);
+                                string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+                                if (File.Exists(sessionFile))
+                                    File.SetLastWriteTimeUtc(sessionFile, DateTime.UtcNow);
+                                Logger.Log("DACServer.log", $"[INFO_CHECK] Periodic client info OK for client {c?.id}");
                             }
                         }
                         break;
@@ -633,6 +690,7 @@ namespace UACServer.Network
         {
             const int checkIntervalMs = 60000; // 1 minuto
             const int maxHashCheckDelayMinutes = 35; // tempo massimo senza hash check
+            const int maxInfoCheckDelayMinutes = 35; // tempo massimo senza info check
             while (isRunning)
             {
                 DateTime now = DateTime.UtcNow;
@@ -641,10 +699,23 @@ namespace UACServer.Network
                 {
                     foreach (var c in clients)
                     {
-                        // Se il client è connesso da più di 40 minuti e non ha mai inviato hash check, oppure l'ultimo hash check è troppo vecchio
                         if ((now - c.LastHashCheckTime).TotalMinutes > maxHashCheckDelayMinutes)
                         {
                             toDisconnect.Add(c);
+                            continue;
+                        }
+                        // Controllo info periodico
+                        string sessionDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session");
+                        if (!Directory.Exists(sessionDir))
+                            Directory.CreateDirectory(sessionDir);
+                        string safeIp = SanitizeFileName(c.ip_addr?.ToString());
+                        string safeGameCode = SanitizeFileName(c.gamecode);
+                        string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+                        if (File.Exists(sessionFile))
+                        {
+                            DateTime lastWrite = File.GetLastWriteTimeUtc(sessionFile);
+                            if ((now - lastWrite).TotalMinutes > maxInfoCheckDelayMinutes)
+                                toDisconnect.Add(c);
                         }
                     }
                 }
@@ -652,20 +723,19 @@ namespace UACServer.Network
                 {
                     try
                     {
-                        // BAN & KICK come per hash periodico errato
                         if (c?.ip_addr != null)
                         {
                             string ip = c.ip_addr.ToString();
-                            DatabaseLogger.BanAccountsByIp(ip, "Game file tampering - auto permanent ban");
+                            DatabaseLogger.BanAccountsByIp(ip, "Game file tampering or info mismatch - auto permanent ban");
                             int? userUid = DatabaseLogger.GetUserUidByIp(ip);
                             if (userUid.HasValue)
-                                DatabaseLogger.BanUserUid(userUid.Value, "Game file tampering - auto permanent ban");
+                                DatabaseLogger.BanUserUid(userUid.Value, "Game file tampering or info mismatch - auto permanent ban");
                         }
-                        Logger.Log("DACServer.log", $"[SECURITY] Client {c.id} ({c.ip_addr}) disconnesso per mancato invio hash check periodico.");
+                        Logger.Log("DACServer.log", $"[SECURITY] Client {c.id} ({c.ip_addr}) disconnesso per mancato invio info/hash periodico.");
                         DatabaseLogger.LogDetection(
                             c.id,
-                            "HashCheckTimeout",
-                            $"Client disconnesso per mancato invio hash check periodico da oltre {maxHashCheckDelayMinutes} minuti.",
+                            "InfoCheckTimeout",
+                            $"Client disconnesso per mancato invio info/hash periodico da oltre {maxInfoCheckDelayMinutes} minuti.",
                             c.hostname,
                             c.gamecode,
                             c.ip_addr?.ToString(),
@@ -673,8 +743,9 @@ namespace UACServer.Network
                             c.hardware_id
                         );
                         RemoveAuthenticatedSession(c);
-                        c.net_client?.Client?.Disconnect(false);
-                        c.net_client?.Dispose();
+                        Handlers.RemoveSessionFile(c);
+                        c?.net_client?.Client?.Disconnect(false);
+                        c?.net_client?.Dispose();
                         lock (clients)
                         {
                             clients.Remove(c);
@@ -684,6 +755,15 @@ namespace UACServer.Network
                 }
                 Thread.Sleep(checkIntervalMs);
             }
+        }
+
+        // Sanitize file name helper (copied from Handlers)
+        private static string SanitizeFileName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "null";
+            foreach (char c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return name;
         }
     }
 

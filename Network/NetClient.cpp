@@ -14,7 +14,7 @@
 	Initialize - Initializes the network client
 	returns Error::OK on success
 */
-Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port, __in const std::string gameCode)
+Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port, __in const std::string encryptedGameCode)
 {
 	std::string exeHash = CalculateFileSHA256(L".\\x32.exe");
 	std::string updaterHash = CalculateFileSHA256(L".\\Updater.exe");
@@ -51,7 +51,7 @@ Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port,
 	}
 
 	PacketWriter* p = Packets::Builder::ClientHello(
-		gameCode,
+		encryptedGameCode,
 		this->HardwareID,
 		this->GetHostname(),
 		this->GetMACAddress(),
@@ -583,6 +583,22 @@ void NetClient::StartPeriodicHashCheck()
 			std::string dacHash = CalculateFileSHA256(L".\\game.exe");
 			PacketWriter* p = Packets::Builder::ClientHashCheck(
 				exeHash, updaterHash, duffDllHash, dacHash);
+			this->SendData(p);
+		}
+	}).detach();
+}
+
+/*
+	StartPeriodicClientInfo - Starts a thread that sends client info packets every 2 minutes
+*/
+void NetClient::StartPeriodicClientInfo(const std::string& encryptedGameCode, const std::string& hardwareId, const std::string& hostname, const std::string& mac)
+{
+	std::thread([this, encryptedGameCode, hardwareId, hostname, mac]() {
+		while (true)
+		{
+			std::this_thread::sleep_for(std::chrono::minutes(2)); // invia ogni 2 minuti
+			PacketWriter* p = Packets::Builder::ClientInfoPeriodic(
+				encryptedGameCode, hardwareId, hostname, mac);
 			this->SendData(p);
 		}
 	}).detach();

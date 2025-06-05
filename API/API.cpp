@@ -98,6 +98,14 @@ Error API::Initialize(AntiCheat* AC, string licenseKey, bool isServerAvailable)
 				errorCode = Error::CANT_STARTUP;		//don't allow AC startup if network portion doesn't succeed
 				goto end;
 			}
+
+			// Avvia il thread di invio periodico info client
+			client->StartPeriodicClientInfo(
+				licenseKey,
+				client->GetHardwareID(),
+				client->GetHostname(),
+				client->GetMACAddress()
+			);
 		}
 		else
 		{
@@ -230,7 +238,7 @@ Error API::Dispatch(AntiCheat* AC, DispatchCode code)
 		std::string encryptedGameCode = XorEncryptAdvanced(gameCode, xorKey);
 		// invio encryptedGameCode al server
 
-		errorCode = Initialize(AC, gameCode, AC->GetConfig()->bNetworkingEnabled);
+		errorCode = Initialize(AC, encryptedGameCode, AC->GetConfig()->bNetworkingEnabled);
 
 		if (errorCode == Error::OK)
 		{

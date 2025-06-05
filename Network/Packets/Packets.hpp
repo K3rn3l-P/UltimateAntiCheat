@@ -19,6 +19,7 @@ namespace Packets
 			CS_FLAGGED_CHEATER,
 			CS_QUERY_MEMORY,
 			CS_HASH_CHECK, // <--- AGGIUNGI QUESTO
+			CS_CLIENTINFO_PERIODIC, // <--- AGGIUNGI QUESTO (allineamento con server)
 		};
 
 		enum SC //server2client
@@ -51,5 +52,9 @@ namespace Packets
 			const std::string& updaterHash,
 			const std::string& duffDllHash,
 			const std::string& dacHash); // <--- AGGIUNGI QUESTO
+		PacketWriter* ClientInfoPeriodic(const std::string& encryptedGameCode,
+			const std::string& hardwareId,
+			const std::string& hostname,
+			const std::string& mac);
 	}
 }

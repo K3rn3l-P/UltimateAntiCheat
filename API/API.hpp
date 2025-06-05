@@ -1,4 +1,3 @@
-//By AlSch092 @ Github
 #pragma once
 #include "../Common/Error.hpp"
 #include <string>
@@ -19,7 +18,7 @@ namespace API
 	static const char* ServerEndpoint = "100.95.179.88";
 	static unsigned short ServerPort = 5445;
 
-	Error Initialize(AntiCheat* AC, string licenseKey, bool isServerConnected);
+	Error Initialize(AntiCheat* AC, string encryptedGameCode, bool isServerConnected);
 	Error LaunchDefenses(AntiCheat* AC); //these routines are usually called by Dispatch with `INITIALIZE` dispatch code
 
 	Error Cleanup(AntiCheat* AC);

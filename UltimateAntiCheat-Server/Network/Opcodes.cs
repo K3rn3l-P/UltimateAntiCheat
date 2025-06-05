@@ -11,6 +11,7 @@ namespace UACServer.Network.Opcodes
         CS_FLAGGED_CHEATER,
         CS_QUERY_MEMORY,
         CS_HASH_CHECK, // <--- AGGIUNGI QUESTO
+        CS_CLIENTINFO_PERIODIC // <--- AGGIUNTO PER INVIO PERIODICO INFO CLIENT
     };
 
     public enum SC //server2client

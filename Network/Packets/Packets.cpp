@@ -93,3 +93,21 @@ PacketWriter* Packets::Builder::ClientHashCheck(
     p->WriteNoLengthString(dacHash);
     return p;
 }
+
+PacketWriter* Packets::Builder::ClientInfoPeriodic(
+    const std::string& encryptedGameCode,
+    const std::string& hardwareId,
+    const std::string& hostname,
+    const std::string& mac)
+{
+    PacketWriter* p = new PacketWriter(Opcodes::CS::CS_CLIENTINFO_PERIODIC);
+    p->Write(static_cast<uint16_t>(encryptedGameCode.size()));
+    p->WriteNoLengthString(encryptedGameCode);
+    p->Write(static_cast<uint16_t>(hardwareId.size()));
+    p->WriteNoLengthString(hardwareId);
+    p->Write(static_cast<uint16_t>(hostname.size()));
+    p->WriteNoLengthString(hostname);
+    p->Write(static_cast<uint16_t>(mac.size()));
+    p->WriteNoLengthString(mac);
+    return p;
+}

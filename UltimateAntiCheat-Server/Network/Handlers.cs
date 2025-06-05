@@ -4,6 +4,7 @@ using System;
 using System.Text;
 using System.IO;
 using System.Security.Cryptography;
+using Newtonsoft.Json;
 
 namespace UACServer.Network
 {
@@ -214,6 +215,27 @@ namespace UACServer.Network
                 $"Ricevuti e validati hash di x32.exe, Updater.exe, duff.dll, game.exe da {c.ip_addr}"
             );
 
+            // --- CREAZIONE FILE SESSIONE ALLA PRIMA CONNESSIONE ---
+            var info = new ClientInfoJson
+            {
+                Hostname = hostname,
+                GameCode = gamecode,
+                HardwareId = hardware_id,
+                Mac = MAC,
+                Ip = c.ip_addr?.ToString(),
+                ClientId = c.id
+            };
+            string sessionDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session");
+            if (!Directory.Exists(sessionDir))
+                Directory.CreateDirectory(sessionDir);
+            string safeIp = SanitizeFileName(info.Ip);
+            string safeGameCode = SanitizeFileName(info.GameCode);
+            string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+            if (!File.Exists(sessionFile))
+            {
+                File.WriteAllText(sessionFile, JsonConvert.SerializeObject(info, Formatting.Indented));
+            }
+
             return true;
         }
         // --- FINE - VALIDAZIONE HASH ---
@@ -396,6 +418,116 @@ namespace UACServer.Network
             );
 
             return true;
+        }
+
+        // Sanitize file name helper
+        private static string SanitizeFileName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "null";
+            foreach (char c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return name;
+        }
+
+        public static bool HandleClientInfoPeriodic(AntiCheatClient c, PacketReader p, out string failReason, out bool alreadyLogged)
+        {
+            failReason = null;
+            alreadyLogged = false;
+
+            ushort gamecode_len = p.ReadUShort();
+            string encrypted_gamecode = p.ReadString(gamecode_len);
+            string xorKey = GetXorKey();
+            string gamecode = XorDecryptAdvanced(encrypted_gamecode, xorKey);
+
+            ushort hardware_id_len = p.ReadUShort();
+            string hardware_id = p.ReadString(hardware_id_len);
+
+            ushort hostname_len = p.ReadUShort();
+            string hostname = p.ReadString(hostname_len);
+
+            ushort MAC_len = p.ReadUShort();
+            string MAC = p.ReadString(MAC_len);
+
+            // Prepara oggetto info
+            var info = new ClientInfoJson
+            {
+                Hostname = hostname,
+                GameCode = gamecode,
+                HardwareId = hardware_id,
+                Mac = MAC,
+                Ip = c.ip_addr?.ToString(),
+                ClientId = c.id
+            };
+
+            // Path session
+            string sessionDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session");
+            if (!Directory.Exists(sessionDir))
+                Directory.CreateDirectory(sessionDir);
+            string safeIp = SanitizeFileName(info.Ip);
+            string safeGameCode = SanitizeFileName(info.GameCode);
+            string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+
+            // Se il file non esiste, lo crea (primo hello)
+            if (!File.Exists(sessionFile))
+            {
+                File.WriteAllText(sessionFile, JsonConvert.SerializeObject(info, Formatting.Indented));
+                return true;
+            }
+            // Se esiste, confronta
+            var saved = JsonConvert.DeserializeObject<ClientInfoJson>(File.ReadAllText(sessionFile));
+            if (!info.Equals(saved))
+            {
+                failReason = "Mismatch tra info periodico e session iniziale";
+                Logger.Log("DACServer.log", $"[SECURITY] Client info periodic mismatch: {info.Ip} (expected: {JsonConvert.SerializeObject(saved)}, got: {JsonConvert.SerializeObject(info)})");
+                DatabaseLogger.LogDetection(
+                    c.id,
+                    "ClientInfoMismatch",
+                    failReason,
+                    hostname,
+                    gamecode,
+                    c.ip_addr?.ToString(),
+                    MAC,
+                    hardware_id
+                );
+                alreadyLogged = true;
+                return false;
+            }
+            return true;
+        }
+
+        // Rimuove il file sessione associato al client (se esiste)
+        public static void RemoveSessionFile(AntiCheatClient c)
+        {
+            try
+            {
+                string sessionDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session");
+                string safeIp = SanitizeFileName(c.ip_addr?.ToString());
+                string safeGameCode = SanitizeFileName(c.gamecode);
+                string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+                if (File.Exists(sessionFile))
+                    File.Delete(sessionFile);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("DACServer.log", $"[ERROR] Impossibile eliminare il file sessione: {ex}");
+            }
+        }
+
+        public class ClientInfoJson
+        {
+            public string Hostname { get; set; }
+            public string GameCode { get; set; }
+            public string HardwareId { get; set; }
+            public string Mac { get; set; }
+            public string Ip { get; set; }
+            public int ClientId { get; set; }
+            public override bool Equals(object obj)
+            {
+                var o = obj as ClientInfoJson;
+                if (o == null) return false;
+                return Hostname == o.Hostname && GameCode == o.GameCode && HardwareId == o.HardwareId && Mac == o.Mac && Ip == o.Ip && ClientId == o.ClientId;
+            }
+            public override int GetHashCode() => (Hostname, GameCode, HardwareId, Mac, Ip, ClientId).GetHashCode();
         }
 
         private static string GetXorKey()

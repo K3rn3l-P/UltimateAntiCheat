@@ -45,7 +45,6 @@
 *.lo
 *.slo
 *.exe
-*.dll
 *.so
 *.a
 *.out
