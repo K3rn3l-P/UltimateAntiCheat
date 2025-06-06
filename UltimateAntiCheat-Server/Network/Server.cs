@@ -199,7 +199,12 @@ namespace UACServer.Network
                         }
                         RemoveAuthenticatedSession(c);
                         Handlers.RemoveSessionFile(c);
-                        c?.net_client?.Client?.Disconnect(false);
+                        try
+                        {
+                            if (c?.net_client?.Client != null && c.net_client.Client.Connected)
+                                c.net_client.Client.Disconnect(false);
+                        }
+                        catch (ObjectDisposedException) { }
                         c?.net_client?.Dispose();
                         return;
                     }
@@ -294,6 +299,13 @@ namespace UACServer.Network
                         }
                         RemoveAuthenticatedSession(toRemove);
                         Handlers.RemoveSessionFile(toRemove);
+                        try
+                        {
+                            if (toRemove?.net_client?.Client != null && toRemove.net_client.Client.Connected)
+                                toRemove.net_client.Client.Disconnect(false);
+                        }
+                        catch (ObjectDisposedException) { }
+                        toRemove?.net_client?.Dispose();
                         clients.Remove(toRemove);
                     }
 
@@ -520,7 +532,12 @@ namespace UACServer.Network
                         DatabaseLogger.LogLogoutEvent(c.id, DateTime.Now);
                         RemoveAuthenticatedSession(c);
                         Handlers.RemoveSessionFile(c);
-                        c?.net_client?.Client?.Disconnect(false);
+                        try
+                        {
+                            if (c?.net_client?.Client != null && c.net_client.Client.Connected)
+                                c.net_client.Client.Disconnect(false);
+                        }
+                        catch (ObjectDisposedException) { }
                         c?.net_client?.Dispose();
                         return false; // chiudi la connessione dopo il goodbye
 
@@ -665,17 +682,12 @@ namespace UACServer.Network
                 }
                 else
                 {
-                    Logger.Log("DACServer.log", $"[AUTH][WARN] Tried to remove session for {ip}, but none was found.");
-                    DatabaseLogger.LogDetection(
+                    Logger.Log("DACServer.log", $"[AUTH][INFO] Tried to remove session for {ip}, but none was found.");
+                    // Log solo come evento informativo, non come detection
+                    DatabaseLogger.LogEvent(
                         c.id,
-                        "AuthSessionRemoveWarn",
-                        $"[AUTH][WARN] Tried to remove session for {ip}, but none was found.",
-                        c.hostname,
-                        c.gamecode,
-                        ip,
-                        c.mac_address,
-                        c.hardware_id
-                    );
+                        "AuthSessionRemoveInfo",
+                        $"[AUTH][INFO] Tried to remove session for {ip}, but none was found.");
                 }
             }
         }
@@ -744,7 +756,12 @@ namespace UACServer.Network
                         );
                         RemoveAuthenticatedSession(c);
                         Handlers.RemoveSessionFile(c);
-                        c?.net_client?.Client?.Disconnect(false);
+                        try
+                        {
+                            if (c?.net_client?.Client != null && c.net_client.Client.Connected)
+                                c.net_client.Client.Disconnect(false);
+                        }
+                        catch (ObjectDisposedException) { }
                         c?.net_client?.Dispose();
                         lock (clients)
                         {
