@@ -153,6 +153,12 @@ public class TcpProxy
             return;
         }
 
+        // Solo per il proxy di gioco (porta 30810)
+        if (listenPort == 30810)
+        {
+            UACServer.Network.DatabaseLogger.UpdateLoginAttemptIpByRealIp(clientIp);
+        }
+
         // --- AGGIUNGI QUESTO BLOCCO DOPO L'AUTENTICAZIONE, PRIMA DEL FORWARDING ---
         if (AnticheatServer.Detections.TryGetValue(DetectionFlags.EXTERNAL_ILLEGAL_PROGRAM, out string detectionMsg))
         {

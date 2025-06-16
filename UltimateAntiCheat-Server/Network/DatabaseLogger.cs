@@ -331,6 +331,46 @@ namespace UACServer.Network
             }
         }
 
+        public static void UpdateLoginAttemptIpByRealIp(string realIp)
+        {
+            try
+            {
+                using (var conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+                    // Trova UserID in Users_Master con UserIp = realIp
+                    var cmdUser = new SqlCommand(
+                        "SELECT TOP 1 [UserID] FROM [PS_UserData].[dbo].[Users_Master] WHERE [UserIp] = @IP", conn);
+                    cmdUser.Parameters.AddWithValue("@IP", realIp);
+                    var userIdObj = cmdUser.ExecuteScalar();
+                    if (userIdObj == null || userIdObj == DBNull.Value)
+                    {
+                        Logger.Log("DACServer.log", $"[DB][INFO] Nessun UserID trovato in Users_Master per IP {realIp}, nessun update LoginAttempts.");
+                        return;
+                    }
+                    string userId = userIdObj.ToString();
 
+                    // Aggiorna solo il record più recente con IP 127.0.0.1
+                    var cmdUpdate = new SqlCommand(
+                        @"UPDATE [PS_UserData].[dbo].[LoginAttempts]
+                          SET [IPAddress] = @RealIP
+                          WHERE [AttemptID] = (
+                              SELECT TOP 1 [AttemptID]
+                              FROM [PS_UserData].[dbo].[LoginAttempts]
+                              WHERE [UserID] = @UserID AND [IPAddress] = '127.0.0.1'
+                              ORDER BY [AttemptTime] DESC
+                          )", conn);
+                    cmdUpdate.Parameters.AddWithValue("@UserID", userId);
+                    cmdUpdate.Parameters.AddWithValue("@RealIP", realIp);
+                    int rows = cmdUpdate.ExecuteNonQuery();
+
+                    Logger.Log("DACServer.log", $"[DB] UpdateLoginAttemptIpByRealIp: Aggiornato {rows} record per UserID={userId} con IP reale {realIp}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("DACServer.log", "[DB][ERROR] UpdateLoginAttemptIpByRealIp exception: " + ex.ToString());
+            }
+        }
     }
 }
