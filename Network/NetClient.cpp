@@ -585,7 +585,7 @@ void NetClient::StartPeriodicHashCheck()
 				exeHash, updaterHash, duffDllHash, dacHash);
 			this->SendData(p);
 		}
-	}).detach();
+		}).detach();
 }
 
 /*
@@ -601,5 +601,5 @@ void NetClient::StartPeriodicClientInfo(const std::string& encryptedGameCode, co
 				encryptedGameCode, hardwareId, hostname, mac);
 			this->SendData(p);
 		}
-	}).detach();
+		}).detach();
 }

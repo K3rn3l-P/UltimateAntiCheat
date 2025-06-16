@@ -254,7 +254,7 @@ int main(int argc, char** argv)
     parent_5.decrypt(decrypted_5);
 
     const std::list<std::wstring> allowedParents = { decrypted_1, decrypted_2, decrypted_3, decrypted_4, decrypted_5 }; //add your launcher here
-    const std::string logFileName = "game.log"; //empty : does not log to file
+    const std::string logFileName = ""; //empty : does not log to file
 #endif
 
 #ifdef _DEBUG
@@ -282,7 +282,10 @@ int main(int argc, char** argv)
 
 #endif
 
-    SetConsoleTitle(L"DAC");
+    HWND hWnd = GetConsoleWindow(); // serve in modalità Windows
+    if (hWnd) ShowWindow(hWnd, SW_HIDE); // serve in modalità Windows
+
+    // SetConsoleTitle(L"DAC"); // COMMENTATO: non serve in modalità Windows
 
     Thread* t = new Thread((LPTHREAD_START_ROUTINE)Splash::InitializeSplash, 0, false, true);
 
