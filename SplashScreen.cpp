@@ -27,14 +27,14 @@ void Splash::PositionWindow(HWND hwnd)
     RECT rc;
     GetWindowRect(hwnd, &rc);
 
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    RECT workArea;
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0); // area senza taskbar
 
     int windowWidth = rc.right - rc.left;
     int windowHeight = rc.bottom - rc.top;
 
-    int x = screenWidth - windowWidth;
-    int y = screenHeight - windowHeight;
+    int x = workArea.right - windowWidth;
+    int y = workArea.bottom - windowHeight;
 
     SetWindowPos(hwnd, NULL, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
 }

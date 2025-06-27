@@ -1,6 +1,6 @@
-﻿/*  
+﻿/*
     U.A.C. is a non-invasive usermode anticheat for x64 Windows, tested on Windows 10 & 11. Usermode is used to ensure an optimal end user experience. It also provides insight into how many kernelmode attack methods can be prevented from usermode, through concepts such as secure boot enforcement and DSE checking.
-    
+
     Please view the readme for more information regarding program features. If you'd like to use this project in your game/software, please contact the author.
 
     License: GNU Affero general public license, please be aware of what and what not can be done with this license.. ** you do not have the right to copy this project into your closed-source, for-profit project **
@@ -39,7 +39,7 @@ bool VerifySelfChecksum(const std::wstring& filePath, const std::string& expecte
     return _stricmp(actual.c_str(), expectedSha256.c_str()) == 0;
 }
 // PER ORA COMMENTA PER DEBUG!
-/* 
+/*
 bool CheckRootFolderIntegrity(const std::wstring& rootPath) {
     // Elenco dei file e cartelle obbligatori (senza game.log)
     const std::set<std::wstring> expected = {
@@ -155,16 +155,16 @@ LONG WINAPI g_ExceptionHandler(EXCEPTION_POINTERS* ExceptionInfo);
 
 int main(int argc, char** argv)
 {
-	std::string userKeyboardInput; //for looping until user wants to exit
+    std::string userKeyboardInput; //for looping until user wants to exit
 
     std::wstring rootPath = L".";
-	// Controllo integrità della cartella root (commentato per debug)
+    // Controllo integrità della cartella root (commentato per debug)
    /* if (!CheckRootFolderIntegrity(rootPath)) {
         std::wcerr << L"[ERRORE] Integrità della cartella root fallita. L'applicazione verrà chiusa." << std::endl;
         ExitProcess(1);
     }*/
     // FINE: Controllo integrità della cartella root (commentato per debug)
-    
+
     // Updater: script per SHA256
     /*param(
         [string]$FilePath = "Updater.exe"
@@ -217,7 +217,7 @@ int main(int argc, char** argv)
     const bool bUsingDriver = false; //signed driver for hybrid KM + UM anticheat. the KM driver will not be public, so make one yourself if you want to use this option  
     const bool bEnableLogging = true;
 
-    const std::list<std::wstring> allowedParents = {L"VsDebugConsole.exe", L"vsdbg.exe", L"powershell.exe", L"bash.exe", L"zsh.exe", L"explorer.exe", L"x32.exe", L"Updater.exe" };
+    const std::list<std::wstring> allowedParents = { L"VsDebugConsole.exe", L"vsdbg.exe", L"powershell.exe", L"bash.exe", L"zsh.exe", L"explorer.exe", L"x32.exe", L"Updater.exe" };
     const std::string logFileName = "game.log";
 
 #else
@@ -273,7 +273,7 @@ int main(int argc, char** argv)
     cout << "\t Enable logging :\t\t" << boolalpha << bEnableLogging << endl;
     cout << "\t Allowed parent processes: \t\t" << endl;
 
-    for (auto parent: allowedParents) 
+    for (auto parent : allowedParents)
     {
         wcout << parent << " ";
     }
@@ -305,22 +305,22 @@ int main(int argc, char** argv)
     ProtectedMemory ProtectedSettingsMemory(sizeof(Settings));
 
     Settings::Instance = ProtectedSettingsMemory.Construct<Settings>(
-        bEnableNetworking, 
-        bEnforceSecureBoot, 
-        bEnforceDSE, 
-        bEnforceNoKDBG, 
-        bUseAntiDebugging, 
-        bUseIntegrityChecking, 
-        bCheckThreadIntegrity, 
-        bCheckHypervisor, 
-        bRequireRunAsAdministrator, 
-        bUsingDriver, 
-        allowedParents, 
-        bEnableLogging, 
+        bEnableNetworking,
+        bEnforceSecureBoot,
+        bEnforceDSE,
+        bEnforceNoKDBG,
+        bUseAntiDebugging,
+        bUseIntegrityChecking,
+        bCheckThreadIntegrity,
+        bCheckHypervisor,
+        bRequireRunAsAdministrator,
+        bUsingDriver,
+        allowedParents,
+        bEnableLogging,
         logFileName);
-   
+
     // --- QUI INSERISCI IL BLOCCO DI INIZIALIZZAZIONE DEL NETCLIENT ---
-	
+
 
     // ABILITATO SOLO per test ed errori parental per l'updater.. SOLO TEST (ANCHE IN Detections/API.cpp)
     DWORD parentPid = 0;
@@ -410,7 +410,7 @@ int main(int argc, char** argv)
     cout << "\n----------------------------------------------------------------------------------------------------------" << endl;
     cout << "All protections have been deployed, the program will now loop using its detection methods. Thanks for your interest in the project!" << endl;
     cout << "Please enter 'q' if you'd like to end the program." << endl;
-    
+
     std::wstring exePath;
     if (argc >= 2) {
         exePath = std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>>().from_bytes(argv[1]);
@@ -459,14 +459,14 @@ int main(int argc, char** argv)
         if (!CreateProcessW(
             nullptr,                // lpApplicationName: nullptr per usare commandLine
             &commandLine[0],        // lpCommandLine: deve essere modificabile
-			nullptr, // lpProcessAttributes: nullptr per usare gli attributi di default
-			nullptr, // lpThreadAttributes: nullptr per usare gli attributi di default
-			FALSE, // bInheritHandles: FALSE per non ereditare gli handle
-			0, // dwCreationFlags: 0 per usare le impostazioni di default
-			nullptr, // lpEnvironment: nullptr per usare l'ambiente del processo chiamante
-			nullptr, // lpCurrentDirectory: nullptr per usare la directory corrente
+            nullptr, // lpProcessAttributes: nullptr per usare gli attributi di default
+            nullptr, // lpThreadAttributes: nullptr per usare gli attributi di default
+            FALSE, // bInheritHandles: FALSE per non ereditare gli handle
+            0, // dwCreationFlags: 0 per usare le impostazioni di default
+            nullptr, // lpEnvironment: nullptr per usare l'ambiente del processo chiamante
+            nullptr, // lpCurrentDirectory: nullptr per usare la directory corrente
             &si,
-			&pi))  // Crea il processo
+            &pi))  // Crea il processo
         {
             std::wcerr << L"[ERROR] Failed to launch game executable: " << exePath << L" (error: " << GetLastError() << L")\n";
         }
@@ -555,7 +555,7 @@ int main(int argc, char** argv)
             }
         }
     }
-	// Se il gioco è stato avviato, attendi la chiusura del processo
+    // Se il gioco è stato avviato, attendi la chiusura del processo
     // Cleanup finale
     if (gameStarted) {
         CloseHandle(pi.hThread);
@@ -566,7 +566,7 @@ int main(int argc, char** argv)
 #ifdef _DEBUG
 
     flags = Anti_Cheat->GetMonitor()->GetDetectedFlags();
-    explanations = 
+    explanations =
     {
         { DetectionFlags::PAGE_PROTECTIONS, "Image's .text section is writable, memory was re-re-mapped" },
         { DetectionFlags::CODE_INTEGRITY, "Image's memory in .text or .rdata modified" },
@@ -593,7 +593,7 @@ int main(int argc, char** argv)
         { DetectionFlags::DEBUG_TRAP_FLAG, "A debugging method was detected via trap flag enabled" },
         { DetectionFlags::DEBUG_INT3, "A debugging method was detected via INT3 instruction" },
     };
-    for (DetectionFlags flag : flags) 
+    for (DetectionFlags flag : flags)
     {
         Logger::logf(Info, explanations[flag]);
     }
@@ -620,104 +620,104 @@ void NTAPI __stdcall TLSCallback(PVOID pHandle, DWORD dwReason, PVOID Reserved)
 
     static bool FirstProcessAttach = true;
     static bool SetExceptionHandler = false;
-	static WindowsVersion WinVersion = WindowsVersion::ErrorUnknown;
+    static WindowsVersion WinVersion = WindowsVersion::ErrorUnknown;
 
     switch (dwReason)
     {
-        case DLL_PROCESS_ATTACH:
+    case DLL_PROCESS_ATTACH:
+    {
+        if (!Preventions::StopMultipleProcessInstances()) //prevent multi-clients by using shared memory-mapped region
         {
-            if (!Preventions::StopMultipleProcessInstances()) //prevent multi-clients by using shared memory-mapped region
+            Logger::logf(Err, "Could not initialize program: shared memory check failed, make sure only one instance of the program is open. Shutting down.");
+            terminate();
+        }
+
+		//Logger::logf(Info, " New process attached, current thread %d\n", GetCurrentThreadId()); // PROBLEMA CON WINMAIN: non funziona in modalità Windows, ma solo in console
+
+        if (FirstProcessAttach) //process creation will trigger PROCESS_ATTACH, so we can put some initialize stuff in here incase main() is hooked or statically modified by the attacker
+        {
+            WinVersion = Services::GetWindowsVersion();
+
+            if (!SetExceptionHandler)
             {
-                Logger::logf(Err, "Could not initialize program: shared memory check failed, make sure only one instance of the program is open. Shutting down.");
-                terminate();
-            }
+                SetUnhandledExceptionFilter(g_ExceptionHandler);
 
-            Logger::logf(Info, " New process attached, current thread %d\n", GetCurrentThreadId());
-
-            if (FirstProcessAttach) //process creation will trigger PROCESS_ATTACH, so we can put some initialize stuff in here incase main() is hooked or statically modified by the attacker
-            {
-                WinVersion = Services::GetWindowsVersion();
-
-                if (!SetExceptionHandler)
+                if (!AddVectoredExceptionHandler(1, g_ExceptionHandler))
                 {
-                    SetUnhandledExceptionFilter(g_ExceptionHandler);
-
-                    if (!AddVectoredExceptionHandler(1, g_ExceptionHandler))
-                    {
-                        Logger::logf(Err, " Failed to register Vectored Exception Handler @ TLSCallback: %d\n", GetLastError());
-                    }
-
-                    SetExceptionHandler = true;
+                    Logger::logf(Err, " Failed to register Vectored Exception Handler @ TLSCallback: %d\n", GetLastError());
                 }
 
-                FirstProcessAttach = false;
+                SetExceptionHandler = true;
+            }
+
+            FirstProcessAttach = false;
+        }
+        else
+        {
+            Logger::logf(Detection, " Some unknown process attached @ TLSCallback "); //this should generally never be triggered in this example
+        }
+    }break;
+
+    case DLL_PROCESS_DETACH: //program exit, clean up any memory allocated if required
+    {
+    }break;
+
+    case DLL_THREAD_ATTACH: //add to our thread list, or if thread is not executing valid address range, patch over execution address
+    {
+#ifndef _DEBUG
+        if (!Debugger::AntiDebug::HideThreadFromDebugger(GetCurrentThread())) //hide thread from debuggers, placing this in the TLS callback allows all threads to be hidden
+        {
+            Logger::logf(Warning, " Failed to hide thread from debugger @ TLSCallback: thread id %d\n", GetCurrentThreadId());
+        }
+#endif
+
+        if (SupressingNewThreads)
+        {
+            if (WinVersion == Windows11) //Windows 11 no longer has the thread's start address on the its stack, bummer. don't have a W11 machine either at home
+                return;
+
+            UINT64 ThreadExecutionAddress = *(UINT64*)((UINT64)_AddressOfReturnAddress() + ThreadExecutionAddressStackOffset); //check down the stack for the thread execution address, compare it to good module range, and if not in range then we've detected a rogue thread
+
+            if (ThreadExecutionAddress == 0) //this generally should never be 0, but we'll add a check for good measure incase the offset changes on different W10 builds
+                return;
+
+            auto modules = Process::GetLoadedModules();
+
+            for (auto module : modules)
+            {
+                UINT64 LowAddr = (UINT64)module.dllInfo.lpBaseOfDll;
+                UINT64 HighAddr = (UINT64)module.dllInfo.lpBaseOfDll + module.dllInfo.SizeOfImage;
+
+                if (ThreadExecutionAddress > LowAddr && ThreadExecutionAddress < HighAddr) //a properly loaded DLL is making the thread, so allow it to execute
+                {
+                    //if any unsigned .dll is loaded, it will be caught in the DLL load callback/notifications, so we shouldnt need to cert check in this routine (this will cause slowdowns in execution, also cert checking inside the TLS callback doesn't seem to work properly here)
+                    return; //any manually mapped modules' threads will be stopped since they arent using the loader and thus won't be in the loaded modules list
+                }
+            }
+
+            Logger::logf(Detection, " Stopping unknown thread from being created  @ TLSCallback: thread id %d", GetCurrentThreadId());
+            Logger::logf(Detection, " Thread id %d wants to execute function @ %llX. Patching over this address.", GetCurrentThreadId(), ThreadExecutionAddress);
+
+            DWORD dwOldProt = 0;
+
+            if (!VirtualProtect((LPVOID)ThreadExecutionAddress, sizeof(byte), PAGE_EXECUTE_READWRITE, &dwOldProt)) //make thread start address writable
+            {
+                Logger::logf(Warning, "Failed to call VirtualProtect on ThreadStart address @ TLSCallback: %llX", ThreadExecutionAddress);
             }
             else
             {
-                Logger::logf(Detection, " Some unknown process attached @ TLSCallback "); //this should generally never be triggered in this example
-            }
-        }break;
-
-        case DLL_PROCESS_DETACH: //program exit, clean up any memory allocated if required
-        {
-        }break;
-
-        case DLL_THREAD_ATTACH: //add to our thread list, or if thread is not executing valid address range, patch over execution address
-        {         
-#ifndef _DEBUG
-            if (!Debugger::AntiDebug::HideThreadFromDebugger(GetCurrentThread())) //hide thread from debuggers, placing this in the TLS callback allows all threads to be hidden
-            {
-                Logger::logf(Warning, " Failed to hide thread from debugger @ TLSCallback: thread id %d\n", GetCurrentThreadId());
-            }
-#endif
-
-            if (SupressingNewThreads)
-            {
-                if (WinVersion == Windows11) //Windows 11 no longer has the thread's start address on the its stack, bummer. don't have a W11 machine either at home
-                    return;
-
-                UINT64 ThreadExecutionAddress = *(UINT64*)((UINT64)_AddressOfReturnAddress() + ThreadExecutionAddressStackOffset); //check down the stack for the thread execution address, compare it to good module range, and if not in range then we've detected a rogue thread
-                
-                if (ThreadExecutionAddress == 0) //this generally should never be 0, but we'll add a check for good measure incase the offset changes on different W10 builds
-                    return;
-
-                auto modules = Process::GetLoadedModules();
-
-                for (auto module : modules)
+                if (ThreadExecutionAddress != 0)
                 {
-                    UINT64 LowAddr = (UINT64)module.dllInfo.lpBaseOfDll;
-                    UINT64 HighAddr = (UINT64)module.dllInfo.lpBaseOfDll + module.dllInfo.SizeOfImage;
-
-                    if (ThreadExecutionAddress > LowAddr && ThreadExecutionAddress < HighAddr) //a properly loaded DLL is making the thread, so allow it to execute
-                    {
-                        //if any unsigned .dll is loaded, it will be caught in the DLL load callback/notifications, so we shouldnt need to cert check in this routine (this will cause slowdowns in execution, also cert checking inside the TLS callback doesn't seem to work properly here)
-                        return; //any manually mapped modules' threads will be stopped since they arent using the loader and thus won't be in the loaded modules list
-                    }
-                }
-
-                Logger::logf(Detection, " Stopping unknown thread from being created  @ TLSCallback: thread id %d", GetCurrentThreadId());
-                Logger::logf(Detection, " Thread id %d wants to execute function @ %llX. Patching over this address.", GetCurrentThreadId(), ThreadExecutionAddress);
-
-                DWORD dwOldProt = 0;
-
-                if(!VirtualProtect((LPVOID)ThreadExecutionAddress, sizeof(byte), PAGE_EXECUTE_READWRITE, &dwOldProt)) //make thread start address writable
-                {
-                    Logger::logf(Warning, "Failed to call VirtualProtect on ThreadStart address @ TLSCallback: %llX", ThreadExecutionAddress);
-                }
-                else
-                {
-                    if (ThreadExecutionAddress != 0)
-                    {
-                        *(BYTE*)ThreadExecutionAddress = 0xC3; //write over any functions which are scheduled to execute next by this thread and not inside our whitelisted address range
-                    }
+                    *(BYTE*)ThreadExecutionAddress = 0xC3; //write over any functions which are scheduled to execute next by this thread and not inside our whitelisted address range
                 }
             }
+        }
 
-        }break;
+    }break;
 
-        case DLL_THREAD_DETACH:
-        {
-        }break;
+    case DLL_THREAD_DETACH:
+    {
+    }break;
     };
 }
 
