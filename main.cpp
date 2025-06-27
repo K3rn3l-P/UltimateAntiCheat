@@ -186,7 +186,7 @@ int main(int argc, char** argv)
     Write-Host "L'hash è stato copiato negli appunti."
     pause
     */ //FINE
-    // Controllo SHA256 Updater.exe
+    // Controllo SHA256 Updater.exe 
     std::wstring updaterPath = L".\\Updater.exe";
     if (!VerifySelfChecksum(updaterPath, expectedUpdaterSha256)) {
         std::wcerr << L"[ERRORE] Updater.exe non valido! SHA256 mismatch. L'applicazione verrà chiusa." << std::endl;

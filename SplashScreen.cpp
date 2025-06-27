@@ -28,7 +28,7 @@ void Splash::PositionWindow(HWND hwnd)
     GetWindowRect(hwnd, &rc);
 
     RECT workArea;
-    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0); // area senza taskbar
+    SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0); // area senza taskbar 
 
     int windowWidth = rc.right - rc.left;
     int windowHeight = rc.bottom - rc.top;
