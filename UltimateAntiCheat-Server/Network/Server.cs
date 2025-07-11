@@ -7,6 +7,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Collections.Concurrent; // Aggiungi questa riga
+using System.Linq;
 using UACServer.Network.Opcodes;
 using Newtonsoft.Json;
 
@@ -19,6 +20,7 @@ namespace UACServer.Network
 
         private TcpListener listener;
         private List<AntiCheatClient> clients = new List<AntiCheatClient>();
+        private readonly object clientsLock = new object();
         private bool isRunning = false;
         public static ConcurrentDictionary<string, string> AuthenticatedSessions = new ConcurrentDictionary<string, string>();
         public static Dictionary<DetectionFlags, string> Detections = new Dictionary<DetectionFlags, string>();
@@ -82,12 +84,23 @@ namespace UACServer.Network
 
             Logger.Log("DACServer.log", $"Client connected: {((IPEndPoint)client.Client.RemoteEndPoint).Address}");
 
+            string ip = ((IPEndPoint)client.Client.RemoteEndPoint).Address.ToString();
+
+            // Rimuovi eventuali client con lo stesso IP
+            lock (clientsLock)
+            {
+                clients.RemoveAll(ca => ca.ip_addr != null && ca.ip_addr.ToString() == ip);
+            }
+
             AntiCheatClient c = new AntiCheatClient();
             c.id = new Random().Next(0, int.MaxValue); //right now not concerned about duplicate id's, chance is very low to encounter this
             c.net_client = client;
             c.ip_addr = ((IPEndPoint)client.Client.RemoteEndPoint).Address;
             c.connected_at = Environment.TickCount;
-            this.clients.Add(c);
+            lock (clientsLock)
+            {
+                clients.Add(c);
+            }
 
             byte[] buffer = new byte[1024];
 
@@ -163,7 +176,10 @@ namespace UACServer.Network
                         Handlers.RemoveSessionFile(c);
                     }
 
-                    this.clients.Remove(c);
+                    lock (clientsLock)
+                    {
+                        clients.Remove(c);
+                    }
                     return;
                 }
                 catch (ObjectDisposedException ex)
@@ -707,34 +723,26 @@ namespace UACServer.Network
             {
                 DateTime now = DateTime.UtcNow;
                 List<AntiCheatClient> toDisconnect = new List<AntiCheatClient>();
-                lock (clients)
+                List<AntiCheatClient> clientsSnapshot;
+                lock (clientsLock)
                 {
-                    foreach (var c in clients)
-                    {
-                        if ((now - c.LastHashCheckTime).TotalMinutes > maxHashCheckDelayMinutes)
-                        {
-                            toDisconnect.Add(c);
-                            continue;
-                        }
-                        // Controllo info periodico
-                        string sessionDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session");
-                        if (!Directory.Exists(sessionDir))
-                            Directory.CreateDirectory(sessionDir);
-                        string safeIp = SanitizeFileName(c.ip_addr?.ToString());
-                        string safeGameCode = SanitizeFileName(c.gamecode);
-                        string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
-                        if (File.Exists(sessionFile))
-                        {
-                            DateTime lastWrite = File.GetLastWriteTimeUtc(sessionFile);
-                            if ((now - lastWrite).TotalMinutes > maxInfoCheckDelayMinutes)
-                                toDisconnect.Add(c);
-                        }
-                    }
+                    clientsSnapshot = clients.ToList();
                 }
-                foreach (var c in toDisconnect)
+                foreach (var c in clientsSnapshot)
                 {
-                    try
+                    // Se il client non è più connesso, rimuovilo subito
+                    if (c.net_client == null || !c.net_client.Connected)
                     {
+                        lock (clientsLock)
+                        {
+                            clients.Remove(c);
+                        }
+                        continue;
+                    }
+
+                    if ((DateTime.UtcNow - c.LastHashCheckTime).TotalMinutes > maxHashCheckDelayMinutes)
+                    {
+                        // ban e rimozione
                         if (c?.ip_addr != null)
                         {
                             string ip = c.ip_addr.ToString();
@@ -763,12 +771,11 @@ namespace UACServer.Network
                         }
                         catch (ObjectDisposedException) { }
                         c?.net_client?.Dispose();
-                        lock (clients)
+                        lock (clientsLock)
                         {
                             clients.Remove(c);
                         }
                     }
-                    catch { }
                 }
                 Thread.Sleep(checkIntervalMs);
             }
