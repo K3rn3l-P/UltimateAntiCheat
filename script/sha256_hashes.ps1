@@ -1,9 +1,8 @@
 # Script per progetto DAC Ultimate AntiCheat!
 $ErrorActionPreference = "Stop"
 
-# Log file path: nella stessa cartella dello script
-$logFile = Join-Path $PSScriptRoot "postbuild_hash_update.log"
-
+# Log file path (modifica se vuoi salvarlo altrove)
+$logFile = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\postbuild_hash_update.log"
 function Write-Log($msg) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     "$timestamp $msg" | Out-File -FilePath $logFile -Append
@@ -12,6 +11,7 @@ function Write-Log($msg) {
 
 trap {
     Write-Log "[ERRORE] Si è verificato un errore nello script: $($_.Exception.Message)"
+    pause
     exit 1
 }
 
@@ -19,7 +19,7 @@ Write-Log "=== Post-build hash update started ==="
 
 # Percorsi dei file da controllare
 $files = @{
-    "Updater.exe" = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\shaiya-updater\Updater\bin\Release\net6.0-windows7.0\win-x86\publish\Updater.exe"
+    "Updater.exe" = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\shaiya-updater\Updater\bin\Release\net6.0-windows7.0\publish\win-x86\Updater.exe"
     "duff.dll"    = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\shaiya-essentials\Release\duff.dll"
     "x32.exe"     = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\Duff_Client-v20\x32.exe"
     "game.exe"    = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\x64\Release\game.exe"
