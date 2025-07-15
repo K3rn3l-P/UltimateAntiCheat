@@ -126,6 +126,6 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>powershell -ExecutionPolicy Bypass -File "$(ProjectDir)..\script\sha256_hashes.ps1" &amp;&amp; powershell -ExecutionPolicy Bypass -File "$(ProjectDir)..\script\ExportAndCopyXorKey.ps1"</PostBuildEvent>
+    <PostBuildEvent>powershell -ExecutionPolicy Bypass -File "$(ProjectDir)..\script\sha256_hashes.ps1" &amp;&amp; powershell -ExecutionPolicy Bypass -File "$(ProjectDir)..\script\ExportAndCopyXorKey.ps1" &amp;&amp; powershell -ExecutionPolicy Bypass -File "$(ProjectDir)..\script\crea_special_patch.ps1"</PostBuildEvent>
   </PropertyGroup>
 </Project>

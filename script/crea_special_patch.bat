@@ -18,4 +18,3 @@ if %errorlevel% equ 0 (
 ) else (
     echo Errore nella creazione della Special patch!
 )
-pause
