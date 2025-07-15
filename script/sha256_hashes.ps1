@@ -19,7 +19,7 @@ Write-Log "=== Post-build hash update started ==="
 
 # Percorsi dei file da controllare
 $files = @{
-    "Updater.exe" = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\shaiya-updater\Updater\bin\Release\net6.0-windows7.0\publish\win-x86\Updater.exe"
+    "Updater.exe" = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\shaiya-updater\Updater\bin\x86\Release\net8.0-windows7.0\publish\win-x86\Updater.exe"
     "duff.dll"    = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\shaiya-essentials\Release\duff.dll"
     "x32.exe"     = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\Duff_Client-v20\x32.exe"
     "game.exe"    = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\x64\Release\game.exe"
