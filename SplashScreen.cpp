@@ -1,10 +1,11 @@
 #include "SplashScreen.hpp"
+#include "resource.h"
 
 void Splash::InitializeSplash()
 {
     const int splashDisplayTime = 5000;
 
-    GdiplusStartupInput gdiplusStartupInput;    //Initialize GDI+
+    GdiplusStartupInput gdiplusStartupInput;    // Initialize GDI+
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, nullptr);
 
     HINSTANCE hInstance = GetModuleHandle(nullptr);
@@ -66,38 +67,66 @@ LRESULT CALLBACK Splash::SplashWndProc(HWND hWnd, UINT message, WPARAM wParam, L
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-
         Graphics graphics(hdc);
-        Image image(SplashImageName);
+
+        HRSRC hResource = FindResource(GetModuleHandle(nullptr), MAKEINTRESOURCE(IDR_SPLASH_IMAGE), RT_RCDATA);
+        if (!hResource) {
+            Logger::logf(Warning, "Failed to load splash screen resource.");
+            EndPaint(hWnd, &ps);
+            break;
+        }
+
+        DWORD imageSize = SizeofResource(GetModuleHandle(nullptr), hResource);
+        HGLOBAL hLoadedResource = LoadResource(GetModuleHandle(nullptr), hResource);
+        void* pResourceData = LockResource(hLoadedResource);
+
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, imageSize);
+        if (!hMem) {
+            Logger::logf(Warning, "Failed to allocate memory for splash image.");
+            EndPaint(hWnd, &ps);
+            break;
+        }
+        void* pMem = GlobalLock(hMem);
+        memcpy(pMem, pResourceData, imageSize);
+        GlobalUnlock(hMem);
+
+        IStream* pStream = nullptr;
+        HRESULT hr = CreateStreamOnHGlobal(hMem, TRUE, &pStream); // TRUE: lo stream libera hMem
+        if (FAILED(hr) || !pStream) {
+            Logger::logf(Warning, "Failed to create stream for splash screen resource.");
+            GlobalFree(hMem);
+            EndPaint(hWnd, &ps);
+            break;
+        }
+
+        Image image(pStream);
+        pStream->Release();
 
         UINT imgWidth = image.GetWidth();
         UINT imgHeight = image.GetHeight();
 
-        if (imgWidth == 0 || imgHeight == 0) //failed to fetch image, check path
-        {
-            Logger::logf(Warning, "Failed to load splash screen: please ensure splash.png is in the current folder or project root folder.");
-            return 0;
+        if (imgWidth == 0 || imgHeight == 0) {
+            Logger::logf(Warning, "Failed to load splash screen image.");
+            EndPaint(hWnd, &ps);
+            break;
         }
 
         RECT rect;
         GetClientRect(hWnd, &rect);
         int winWidth = rect.right - rect.left;
         int winHeight = rect.bottom - rect.top;
-   
-        float imgAspect = (float)imgWidth / imgHeight; //calculate aspect ratios
+
+        float imgAspect = (float)imgWidth / imgHeight;
         float winAspect = (float)winWidth / winHeight;
- 
-        int drawWidth, drawHeight;  //fit the image in the window
+
+        int drawWidth, drawHeight;
         int offsetX = 0, offsetY = 0;
 
-        if (winAspect > imgAspect)
-        {
+        if (winAspect > imgAspect) {
             drawHeight = winHeight;
             drawWidth = (int)(drawHeight * imgAspect);
             offsetX = (winWidth - drawWidth) / 2;
-        }
-        else
-        {
+        } else {
             drawWidth = winWidth;
             drawHeight = (int)(drawWidth / imgAspect);
             offsetY = (winHeight - drawHeight) / 2;
@@ -106,7 +135,8 @@ LRESULT CALLBACK Splash::SplashWndProc(HWND hWnd, UINT message, WPARAM wParam, L
         graphics.DrawImage(&image, offsetX, offsetY, drawWidth, drawHeight);
 
         EndPaint(hWnd, &ps);
-    } break;
+        break;
+    }
     case WM_CLOSE: 
     {
         DestroyWindow(hWnd);
