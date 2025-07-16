@@ -231,7 +231,7 @@ int main(int argc, char** argv)
     const bool bCheckHypervisor = false;
     const bool bRequireRunAsAdministrator = true;
     const bool bUsingDriver = false; //signed driver for hybrid KM + UM anticheat. the KM driver will not be public, so make one yourself if you want to use this option
-    const bool bEnableLogging = true; // set to false to not create a detailed AntiCheat log file on the user's system
+    const bool bEnableLogging = false; // set to false to not create a detailed AntiCheat log file on the user's system
 
     constexpr auto parent_1 = OBFUSCATE("explorer.exe"); //in release build we can encrypt any compiled strings and decrypt them at runtime
     wchar_t decrypted_1[parent_1.getSize()] = {};
