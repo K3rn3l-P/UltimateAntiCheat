@@ -25,6 +25,11 @@ namespace UACServer.Network
         public static ConcurrentDictionary<string, string> AuthenticatedSessions = new ConcurrentDictionary<string, string>();
         public static Dictionary<DetectionFlags, string> Detections = new Dictionary<DetectionFlags, string>();
 
+        public AnticheatServer()
+        {
+            AddDetectionDictionary();
+        }
+
         public void Start(string ipAddress, int port)
         {
             listener = new TcpListener(IPAddress.Parse(ipAddress), port);
