@@ -12,6 +12,11 @@ public class TcpProxy
     private static readonly ConcurrentDictionary<string, object> ActiveConnections = new ConcurrentDictionary<string, object>();
     public static readonly ConcurrentDictionary<string, int> FailedAttempts = new ConcurrentDictionary<string, int>();
     public const int MaxFailedAttempts = 3;
+
+    // Per il reset temporale dei tentativi EXTERNAL_ILLEGAL_PROGRAM
+    public static readonly ConcurrentDictionary<string, DateTime> ExternalIllegalTimestamps = new ConcurrentDictionary<string, DateTime>();
+    public static readonly TimeSpan ExternalIllegalResetInterval = TimeSpan.FromHours(12);
+
     public static void BanIpAndUserUid(string clientIp, string reason)
     {
         DatabaseLogger.BanAccountsByIp(clientIp, reason);
@@ -157,21 +162,6 @@ public class TcpProxy
         if (listenPort == 30810)
         {
             UACServer.Network.DatabaseLogger.UpdateLoginAttemptIpByRealIp(clientIp);
-        }
-
-        // --- AGGIUNGI QUESTO BLOCCO DOPO L'AUTENTICAZIONE, PRIMA DEL FORWARDING ---
-        if (AnticheatServer.Detections.TryGetValue(DetectionFlags.EXTERNAL_ILLEGAL_PROGRAM, out string detectionMsg))
-        {
-            // Qui puoi controllare se l'IP o UserUID ha già avuto 3 detection di questo tipo
-            int externalIllegalCount = FailedAttempts.AddOrUpdate(clientIp + "_external", 1, (key, old) => old + 1);
-            if (externalIllegalCount >= MaxFailedAttempts)
-            {
-                string blockMsg = $"[PROXY][BLOCKED] EXTERNAL_ILLEGAL_PROGRAM rilevato per {clientIp} (raggiunto il limite di {MaxFailedAttempts} detection, IP bannato)";
-                BanIpAndUserUid(clientIp, blockMsg);
-                client.Close();
-                ActiveConnections.TryRemove(connectionKey, out _);
-                return;
-            }
         }
 
         Logger.Log("DACServer.log", $"[PROXY] Client {clientIp} authenticated successfully.");

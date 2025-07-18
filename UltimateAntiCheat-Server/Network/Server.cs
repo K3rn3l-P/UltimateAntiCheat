@@ -511,18 +511,85 @@ namespace UACServer.Network
                                 c.hardware_id
                             );
 
-                            // --- AGGIUNGI QUESTO BLOCCO ---
-                            if (cheat_reason == DetectionFlags.EXTERNAL_ILLEGAL_PROGRAM && c.ip_addr != null)
+                            // Lista di detection critiche (escluso hash)
+                            DetectionFlags[] criticalFlags = new DetectionFlags[] {
+                                DetectionFlags.PAGE_PROTECTIONS,
+                                DetectionFlags.CODE_INTEGRITY,
+                                DetectionFlags.DLL_TAMPERING,
+                                DetectionFlags.BAD_IAT,
+                                DetectionFlags.OPEN_PROCESS_HANDLES,
+                                DetectionFlags.UNSIGNED_DRIVERS,
+                                DetectionFlags.INJECTED_ILLEGAL_PROGRAM,
+                                DetectionFlags.EXTERNAL_ILLEGAL_PROGRAM,
+                                DetectionFlags.MANUAL_MAPPING,
+                                DetectionFlags.SUSPENDED_THREAD,
+                                DetectionFlags.HYPERVISOR,
+                                DetectionFlags.REGISTRY_KEY_MODIFICATIONS,
+                                DetectionFlags.DEBUG_WINAPI_DEBUGGER,
+                                DetectionFlags.DEBUG_PEB,
+                                DetectionFlags.DEBUG_HARDWARE_REGISTERS,
+                                DetectionFlags.DEBUG_HEAP_FLAG,
+                                DetectionFlags.DEBUG_INT3,
+                                DetectionFlags.DEBUG_INT2C,
+                                DetectionFlags.DEBUG_CLOSEHANDLE,
+                                DetectionFlags.DEBUG_DEBUG_OBJECT,
+                                DetectionFlags.DEBUG_VEH_DEBUGGER,
+                                DetectionFlags.DEBUG_KERNEL_DEBUGGER,
+                                DetectionFlags.DEBUG_TRAP_FLAG,
+                                DetectionFlags.DEBUG_DEBUG_PORT,
+                                DetectionFlags.DEBUG_PROCESS_DEBUG_FLAGS,
+                                DetectionFlags.DEBUG_REMOTE_DEBUGGER,
+                                DetectionFlags.DEBUG_DBG_BREAK,
+                                DetectionFlags.DEBUG_DBK64_DRIVER
+                            };
+
+                            if (criticalFlags.Contains(cheat_reason) && c.ip_addr != null)
                             {
                                 string clientIp = c.ip_addr.ToString();
-                                int externalIllegalCount = TcpProxy.FailedAttempts.AddOrUpdate(clientIp + "_external", 1, (key, old) => old + 1);
-                                if (externalIllegalCount >= TcpProxy.MaxFailedAttempts)
+                                string key = clientIp + "_" + cheat_reason.ToString();
+                                DateTime now = DateTime.UtcNow;
+                                DateTime last;
+                                if (TcpProxy.ExternalIllegalTimestamps.TryGetValue(key, out last))
                                 {
-                                    string blockMsg = $"[PROXY][BLOCKED] EXTERNAL_ILLEGAL_PROGRAM Unauthenticated client {clientIp} ({TcpProxy.MaxFailedAttempts} attempt limit reached, IP banned)";
+                                    if ((now - last) > TcpProxy.ExternalIllegalResetInterval)
+                                    {
+                                        TcpProxy.FailedAttempts[key] = 1;
+                                        Logger.Log("DACServer.log", $"[PROXY] Reset contatore {cheat_reason} per {clientIp} dopo 12 ore");
+                                    }
+                                    else
+                                    {
+                                        TcpProxy.FailedAttempts.AddOrUpdate(key, 1, (k, old) => old + 1);
+                                    }
+                                }
+                                else
+                                {
+                                    TcpProxy.FailedAttempts[key] = 1;
+                                }
+                                TcpProxy.ExternalIllegalTimestamps[key] = now;
+                                int detectionCount = TcpProxy.FailedAttempts[key];
+                                Logger.Log("DACServer.log", $"[PROXY] {cheat_reason} detection per {clientIp}: tentativo {detectionCount}/{TcpProxy.MaxFailedAttempts}");
+                                // Chiudi la sessione subito
+                                RemoveAuthenticatedSession(c);
+                                Handlers.RemoveSessionFile(c);
+                                try
+                                {
+                                    if (c.net_client.Client != null && c.net_client.Client.Connected)
+                                        c.net_client.Client.Disconnect(false);
+                                }
+                                catch (ObjectDisposedException) { }
+                                c.net_client.Dispose();
+                                lock (clientsLock)
+                                {
+                                    clients.Remove(c);
+                                }
+                                // Se è la terza rilevazione, banna
+                                if (detectionCount >= TcpProxy.MaxFailedAttempts)
+                                {
+                                    string blockMsg = $"[PROXY][BLOCKED] {cheat_reason} detected for {clientIp} (reached {TcpProxy.MaxFailedAttempts} detection limit, IP banned)";
                                     TcpProxy.BanIpAndUserUid(clientIp, blockMsg);
                                 }
+                                return false;
                             }
-                            // --- FINE BLOCCO ---
                         }
                         break;
 

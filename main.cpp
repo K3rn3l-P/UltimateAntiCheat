@@ -254,7 +254,7 @@ int main(int argc, char** argv)
     parent_5.decrypt(decrypted_5);
 
     const std::list<std::wstring> allowedParents = { decrypted_1, decrypted_2, decrypted_3, decrypted_4, decrypted_5 }; //add your launcher here
-    const std::string logFileName = ""; //empty : does not log to file
+	const std::string logFileName = ""; //empty : does not log to file (game.log), otherwise logs to file with this name
 #endif
 
 #ifdef _DEBUG
