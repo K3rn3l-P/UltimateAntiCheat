@@ -56,7 +56,8 @@ public:
 	void WriteString(const std::string& str); // Dynamically-lengthed strings
 	void WriteString(const std::string& str, size_t len); // Static-lengthed strings
 	void WriteWideString(const std::wstring& str, size_t len);
-	void WriteNoLengthString(const std::string& str);
+	// Scrive una stringa senza prefisso di lunghezza (solo i byte della stringa)
+	void WriteRawString(const std::string& str);
 	void WriteZeros(int zeros);
 	void WriteByteString(const byte* in_buf, size_t len);
 	void WriteByteStringWithLength(const byte* in_buf, size_t len);
@@ -183,7 +184,7 @@ void PacketWriter::WriteWideString(const std::wstring& str, size_t len) {
 	m_pos += (int)(len * 2);
 }
 
-inline void PacketWriter::WriteNoLengthString(const std::string& str)
+inline void PacketWriter::WriteRawString(const std::string& str)
 {
 	WriteString(str, str.size());
 }

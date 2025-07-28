@@ -12,21 +12,21 @@ PacketWriter* Packets::Builder::ClientHello(
 {
     PacketWriter* p = new PacketWriter(Opcodes::CS::CS_HELLO);
     p->Write(static_cast<uint16_t>(encryptedGameCode.size()));
-    p->WriteNoLengthString(encryptedGameCode);
+    p->WriteRawString(encryptedGameCode);
     p->Write(static_cast<uint16_t>(hardwareId.size()));
-    p->WriteNoLengthString(hardwareId);
+    p->WriteRawString(hardwareId);
     p->Write(static_cast<uint16_t>(hostname.size()));
-    p->WriteNoLengthString(hostname);
+    p->WriteRawString(hostname);
     p->Write(static_cast<uint16_t>(mac.size()));
-    p->WriteNoLengthString(mac);
+    p->WriteRawString(mac);
     p->Write(static_cast<uint16_t>(exeHash.size()));
-    p->WriteNoLengthString(exeHash);
+    p->WriteRawString(exeHash);
     p->Write(static_cast<uint16_t>(updaterHash.size()));
-    p->WriteNoLengthString(updaterHash);
+    p->WriteRawString(updaterHash);
     p->Write(static_cast<uint16_t>(duffDllHash.size()));
-    p->WriteNoLengthString(duffDllHash);
+    p->WriteRawString(duffDllHash);
     p->Write(static_cast<uint16_t>(dacHash.size()));
-    p->WriteNoLengthString(dacHash);
+    p->WriteRawString(dacHash);
     return p;
 }
 
@@ -84,13 +84,13 @@ PacketWriter* Packets::Builder::ClientHashCheck(
 {
     PacketWriter* p = new PacketWriter(Opcodes::CS::CS_HASH_CHECK);
     p->Write(static_cast<uint16_t>(exeHash.size()));
-    p->WriteNoLengthString(exeHash);
+    p->WriteRawString(exeHash);
     p->Write(static_cast<uint16_t>(updaterHash.size()));
-    p->WriteNoLengthString(updaterHash);
+    p->WriteRawString(updaterHash);
     p->Write(static_cast<uint16_t>(duffDllHash.size()));
-    p->WriteNoLengthString(duffDllHash);
+    p->WriteRawString(duffDllHash);
     p->Write(static_cast<uint16_t>(dacHash.size()));
-    p->WriteNoLengthString(dacHash);
+    p->WriteRawString(dacHash);
     return p;
 }
 
@@ -102,12 +102,21 @@ PacketWriter* Packets::Builder::ClientInfoPeriodic(
 {
     PacketWriter* p = new PacketWriter(Opcodes::CS::CS_CLIENTINFO_PERIODIC);
     p->Write(static_cast<uint16_t>(encryptedGameCode.size()));
-    p->WriteNoLengthString(encryptedGameCode);
+    p->WriteRawString(encryptedGameCode);
     p->Write(static_cast<uint16_t>(hardwareId.size()));
-    p->WriteNoLengthString(hardwareId);
+    p->WriteRawString(hardwareId);
     p->Write(static_cast<uint16_t>(hostname.size()));
-    p->WriteNoLengthString(hostname);
+    p->WriteRawString(hostname);
     p->Write(static_cast<uint16_t>(mac.size()));
-    p->WriteNoLengthString(mac);
+    p->WriteRawString(mac);
+    return p;
+}
+
+// Crea un pacchetto per inviare un singolo hash file generico (es: hash sezione .text)
+PacketWriter* Packets::Builder::ClientFileHash(const std::string& fileHash)
+{
+    PacketWriter* p = new PacketWriter(Packets::Opcodes::CS_HASH_CHECK); // Riutilizza opcode hash check
+    p->Write(static_cast<uint16_t>(fileHash.size()));
+    p->WriteRawString(fileHash);
     return p;
 }

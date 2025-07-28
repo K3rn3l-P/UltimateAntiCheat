@@ -10,6 +10,7 @@ using System.Collections.Concurrent; // Aggiungi questa riga
 using System.Linq;
 using UACServer.Network.Opcodes;
 using Newtonsoft.Json;
+using UACServer.Network; // <-- aggiunto per BlacklistManager
 
 namespace UACServer.Network
 {
@@ -28,6 +29,7 @@ namespace UACServer.Network
         public AnticheatServer()
         {
             AddDetectionDictionary();
+            BlacklistManager.Start();
         }
 
         public void Start(string ipAddress, int port)
@@ -87,9 +89,29 @@ namespace UACServer.Network
 
             TcpClient client = listener.EndAcceptTcpClient(result);
 
-            Logger.Log("DACServer.log", $"Client connected: {((IPEndPoint)client.Client.RemoteEndPoint).Address}");
-
             string ip = ((IPEndPoint)client.Client.RemoteEndPoint).Address.ToString();
+
+            // BLOCCO IMMEDIATO: se l'IP è bannato, chiudi subito la connessione
+            if (DatabaseLogger.IsIpBanned(ip))
+            {
+                Logger.Log("DACServer.log", $"[SERVER][BLOCKED] Connessione rifiutata: IP {ip} bannato (Status = -5)");
+                DatabaseLogger.LogDetection(
+                    0,
+                    "ServerBlockedBanned",
+                    $"[SERVER][BLOCKED] Connessione rifiutata: IP {ip} bannato (Status = -5)",
+                    null,
+                    null,
+                    ip,
+                    null,
+                    null
+                );
+                client.Close();
+                client.Dispose(); // chiusura definitiva
+                listener.BeginAcceptTcpClient(HandleClientConnected, null); // Continua ad accettare altri client
+                return;
+            }
+
+            Logger.Log("DACServer.log", $"Client connected: {((IPEndPoint)client.Client.RemoteEndPoint).Address}");
 
             // Rimuovi eventuali client con lo stesso IP
             lock (clientsLock)
@@ -201,6 +223,10 @@ namespace UACServer.Network
 
                 if (bytesRead > 0)
                 {
+                    // --- Blacklist check esempio ---
+                    // var blacklisted = BlacklistManager.BlacklistedProcesses;
+                    // var keywords = BlacklistManager.BlacklistedKeywords;
+                    // Puoi usare queste liste per detection custom
                     bool alreadyLogged;
                     if (!HandlePacket(c, buffer, bytesRead, out alreadyLogged))
                     {
@@ -660,6 +686,19 @@ namespace UACServer.Network
                                         DatabaseLogger.BanUserUid(userUid.Value, "Game file tampering - auto permanent ban");
                                 }
                                 alreadyLogged = true;
+                                // --- FIX: Disconnessione e rimozione client dalla lista ---
+                                try
+                                {
+                                    if (c?.net_client?.Client != null && c.net_client.Client.Connected)
+                                        c.net_client.Client.Disconnect(false);
+                                    c?.net_client?.Close();
+                                }
+                                catch (ObjectDisposedException) { }
+                                c?.net_client?.Dispose();
+                                lock (clientsLock)
+                                {
+                                    clients.Remove(c);
+                                }
                                 return false;
                             }
                             else

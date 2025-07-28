@@ -86,6 +86,7 @@
     <Compile Include="Network\AntiCheatClient.cs" />
     <Compile Include="HexText.cs" />
     <Compile Include="Logger.cs" />
+    <Compile Include="Network\BlacklistManager.cs" />
     <Compile Include="Network\DatabaseLogger.cs" />
     <Compile Include="Network\ExpectedHashes.cs" />
     <Compile Include="Network\Factory.cs" />
@@ -107,6 +108,7 @@
     <None Include="UltimateAntiCheat-Server_TemporaryKey.pfx" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Config\BlacklistedProcessList.local.txt" />
     <Content Include="Icon1.ico" />
   </ItemGroup>
   <ItemGroup>

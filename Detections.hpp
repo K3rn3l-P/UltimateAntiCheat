@@ -1,4 +1,4 @@
-//By AlSch092 @github
+ //By AlSch092 @github
 #pragma once
 #include "Network/NetClient.hpp" //Net Comms
 #include "Network/HttpClient.hpp" //web requests
@@ -95,6 +95,8 @@ public:
 	Settings* GetConfig() const { return this->Config; }
 
 	EvidenceLocker* GetEvidenceLog() const { return this->EvidenceManager; }
+
+	void UpdateBlacklistsFromServer();
 
 private:
 

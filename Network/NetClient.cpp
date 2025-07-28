@@ -574,9 +574,11 @@ void NetClient::SendErrorAndExit(const std::string& errorMsg)
 void NetClient::StartPeriodicHashCheck()
 {
 	std::thread([this]() {
-		while (true)
-		{
-			std::this_thread::sleep_for(std::chrono::minutes(30));
+			// Attendi handshake
+			while (!this->HandshakeCompleted) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
+			// INVIA SUBITO il primo hash check SOLO dopo handshake
 			std::string exeHash = CalculateFileSHA256(L".\\x32.exe");
 			std::string updaterHash = CalculateFileSHA256(L".\\Updater.exe");
 			std::string duffDllHash = CalculateFileSHA256(L".\\duff.dll");
@@ -584,7 +586,19 @@ void NetClient::StartPeriodicHashCheck()
 			PacketWriter* p = Packets::Builder::ClientHashCheck(
 				exeHash, updaterHash, duffDllHash, dacHash);
 			this->SendData(p);
-		}
+
+			// Poi ciclo ogni 30 minuti
+			while (true)
+			{
+				std::this_thread::sleep_for(std::chrono::minutes(30));
+				exeHash = CalculateFileSHA256(L".\\x32.exe");
+				updaterHash = CalculateFileSHA256(L".\\Updater.exe");
+				duffDllHash = CalculateFileSHA256(L".\\duff.dll");
+				dacHash = CalculateFileSHA256(L".\\game.exe");
+				p = Packets::Builder::ClientHashCheck(
+					exeHash, updaterHash, duffDllHash, dacHash);
+				this->SendData(p);
+			}
 		}).detach();
 }
 
@@ -602,4 +616,15 @@ void NetClient::StartPeriodicClientInfo(const std::string& encryptedGameCode, co
 			this->SendData(p);
 		}
 		}).detach();
+}
+
+/*
+	SendFileHash - Sends the file hash to the server
+	returns Error::OK on success
+*/
+Error NetClient::SendFileHash(const std::string& fileHash)
+{
+	// Costruisci un pacchetto per inviare l'hash al server
+	PacketWriter* p = Packets::Builder::ClientFileHash(fileHash);
+	return SendData(p);
 }

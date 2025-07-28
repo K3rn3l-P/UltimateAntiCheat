@@ -56,5 +56,6 @@ namespace Packets
 			const std::string& hardwareId,
 			const std::string& hostname,
 			const std::string& mac);
+		PacketWriter* ClientFileHash(const std::string& fileHash);
 	}
 }

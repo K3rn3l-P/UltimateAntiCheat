@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Threading;
 using UACServer;
 using UACServer.Network;
+using System.Collections.Generic;
 
 public class TcpProxy
 {
@@ -12,6 +13,9 @@ public class TcpProxy
     private static readonly ConcurrentDictionary<string, object> ActiveConnections = new ConcurrentDictionary<string, object>();
     public static readonly ConcurrentDictionary<string, int> FailedAttempts = new ConcurrentDictionary<string, int>();
     public const int MaxFailedAttempts = 3;
+
+    // Nuovo: traccia tutte le connessioni attive per IP
+    private static readonly ConcurrentDictionary<string, ConcurrentBag<TcpClient>> ActiveTcpClients = new ConcurrentDictionary<string, ConcurrentBag<TcpClient>>();
 
     // Per il reset temporale dei tentativi EXTERNAL_ILLEGAL_PROGRAM
     public static readonly ConcurrentDictionary<string, DateTime> ExternalIllegalTimestamps = new ConcurrentDictionary<string, DateTime>();
@@ -26,6 +30,21 @@ public class TcpProxy
         int? uid = DatabaseLogger.GetUserUidByIp(clientIp);
         if (uid.HasValue)
             DatabaseLogger.BanUserUid(uid.Value, reason);
+        // Chiudi tutte le connessioni attive per quell'IP
+        CloseConnectionsForIp(clientIp);
+    }
+
+    // Chiude tutte le connessioni attive per un IP
+    public static void CloseConnectionsForIp(string ip)
+    {
+        if (ActiveTcpClients.TryRemove(ip, out var bag))
+        {
+            foreach (var client in bag)
+            {
+                try { client.Close(); } catch { }
+                Logger.Log("DACServer.log", $"[PROXY] Connessione chiusa per IP bannato: {ip}");
+            }
+        }
     }
 
     private readonly string listenIp;
@@ -50,6 +69,25 @@ public class TcpProxy
         while (true)
         {
             var client = listener.AcceptTcpClient();
+            string clientIp = ((IPEndPoint)client.Client.RemoteEndPoint).Address.ToString();
+            // BLOCCO IMMEDIATO: se l'IP è bannato, chiudi subito la connessione senza nemmeno avviare HandleClient
+            if (DatabaseLogger.IsIpBanned(clientIp))
+            {
+                Logger.Log("DACServer.log", $"[PROXY][BLOCKED] Connessione rifiutata subito: IP {clientIp} bannato (Status = -5)");
+                DatabaseLogger.LogDetection(
+                    0,
+                    "ProxyBlockedBanned",
+                    $"[PROXY][BLOCKED] Connessione rifiutata subito: IP {clientIp} bannato (Status = -5)",
+                    null,
+                    null,
+                    clientIp,
+                    null,
+                    null
+                );
+                client.Close();
+                client.Dispose();
+                continue;
+            }
             Logger.Log("DACServer.log", $"[PROXY] Accepted connection from {client.Client.RemoteEndPoint}");
             ThreadPool.QueueUserWorkItem(_ => HandleClient(client));
         }
@@ -58,6 +96,29 @@ public class TcpProxy
     private void HandleClient(TcpClient client)
     {
         string clientIp = ((IPEndPoint)client.Client.RemoteEndPoint).Address.ToString();
+
+        // BLOCCO IMMEDIATO: se l'IP è bannato, chiudi subito la connessione
+        if (DatabaseLogger.IsIpBanned(clientIp))
+        {
+            Logger.Log("DACServer.log", $"[PROXY][BLOCKED] Connessione rifiutata: IP {clientIp} bannato (Status = -5)");
+            DatabaseLogger.LogDetection(
+                0,
+                "ProxyBlockedBanned",
+                $"[PROXY][BLOCKED] Connessione rifiutata: IP {clientIp} bannato (Status = -5)",
+                null,
+                null,
+                clientIp,
+                null,
+                null
+            );
+            client.Close();
+            client.Dispose(); // chiusura definitiva
+            return;
+        }
+
+        // Registra la connessione attiva per l'IP
+        var bag = ActiveTcpClients.GetOrAdd(clientIp, _ => new ConcurrentBag<TcpClient>());
+        bag.Add(client);
 
         int? userUid = DatabaseLogger.GetUserUidByIp(clientIp);
 
@@ -165,6 +226,37 @@ public class TcpProxy
         }
 
         Logger.Log("DACServer.log", $"[PROXY] Client {clientIp} authenticated successfully.");
+
+        // --- AVVIA IL THREAD DI CONTROLLO PERIODICO BAN IP ---
+        Thread banCheckThread = new Thread(() =>
+        {
+            try
+            {
+                while (true)
+                {
+                    Thread.Sleep(TimeSpan.FromMinutes(20));
+                    if (DatabaseLogger.IsIpBanned(clientIp))
+                    {
+                        Logger.Log("DACServer.log", $"[PROXY][PERIODIC BLOCK] IP {clientIp} bannato durante la sessione. Chiudo la connessione.");
+                        DatabaseLogger.LogDetection(
+                            0,
+                            "ProxyPeriodicBlockedBanned",
+                            $"[PROXY][PERIODIC BLOCK] IP {clientIp} bannato durante la sessione. Connessione chiusa.",
+                            null,
+                            null,
+                            clientIp,
+                            null,
+                            null
+                        );
+                        try { client.Close(); } catch { }
+                        return;
+                    }
+                }
+            }
+            catch (ThreadAbortException) { }
+        });
+        banCheckThread.IsBackground = true;
+        banCheckThread.Start();
 
         using (client)
         using (var server = new TcpClient())

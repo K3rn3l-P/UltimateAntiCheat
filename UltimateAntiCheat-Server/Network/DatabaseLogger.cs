@@ -1,6 +1,7 @@
 using System;
 using System.Data.SqlClient;
 using System.Configuration;
+using System.Collections.Generic;
 
 namespace UACServer.Network
 {
@@ -163,6 +164,75 @@ namespace UACServer.Network
                 Logger.Log("DACServer.log", "[DB][ERROR] LogEvent exception: " + ex.ToString());
             }
         }
+
+        // Kick all users by IP (kick ogni UserUID associato all'IP)
+        public static void KickAllUsersByIp(string ip, string reason = "Kicked by IP")
+        {
+            try
+            {
+                using (var conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+                    var cmd = new SqlCommand(
+                        "SELECT [UserUID] FROM [PS_UserData].[dbo].[Users_Master] WHERE [UserIp] = @IP", conn);
+                    cmd.Parameters.AddWithValue("@IP", ip);
+
+                    // 1. Leggi tutti gli UserUID in una lista
+                    var userUids = new List<int>();
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            userUids.Add(reader.GetInt32(0));
+                        }
+                    }
+
+                    // 2. Esegui i kick dopo aver chiuso il reader
+                    foreach (var userUid in userUids)
+                    {
+                        using (var kickCmd = new SqlCommand(
+                            "EXEC [OMG_GameWEB].[dbo].[Command] @serviceName = N'ps_game', @cmmd = @KickCmd", conn))
+                        {
+                            kickCmd.Parameters.AddWithValue("@KickCmd", $"/kickuid {userUid}");
+                            kickCmd.ExecuteNonQuery();
+                            Logger.Log("DACServer.log", $"[DB] KickAllUsersByIp: Kicked UserUID {userUid} for IP {ip}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("DACServer.log", "[DB][ERROR] KickAllUsersByIp exception: " + ex.ToString());
+            }
+        }
+
+        public static List<int> GetAllUserUidsByIp(string ip)
+        {
+            var result = new List<int>();
+            try
+            {
+                using (var conn = new SqlConnection(connectionString))
+                {
+                    conn.Open();
+                    var cmd = new SqlCommand(
+                        "SELECT [UserUID] FROM [PS_UserData].[dbo].[Users_Master] WHERE [UserIp] = @IP", conn);
+                    cmd.Parameters.AddWithValue("@IP", ip);
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            result.Add(reader.GetInt32(0));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("DACServer.log", "[DB][ERROR] GetAllUserUidsByIp exception: " + ex.ToString());
+            }
+            return result;
+        }
+
         public static void BanAccountsByIp(string ip, string reason = "[PROXY][BLOCKED]")
         {
             try
@@ -176,12 +246,30 @@ namespace UACServer.Network
                     cmd.ExecuteNonQuery();
                 }
                 Logger.Log("DACServer.log", $"[DB] BanAccountsByIp: Banned all accounts with IP {ip}");
+                // Kick all users with this IP
+                KickAllUsersByIp(ip, reason);
+                // Log il ban per tutti gli UserUID
+                var userUids = GetAllUserUidsByIp(ip);
+                foreach (var userUid in userUids)
+                {
+                    // BANNA TUTTI GLI USERUID IN Users_Bann
+                    BanUserUid(userUid, reason);
+                    LogDetection(
+                        userUid,
+                        "IpBan",
+                        $"[PROXY][BLOCKED] Banned all accounts with IP {ip}",
+                        null, null, ip, null, null
+                    );
+                }
+                // CHIUDI TUTTE LE CONNESSIONI TCP PER QUESTO IP
+                TcpProxy.CloseConnectionsForIp(ip);
             }
             catch (Exception ex)
             {
                 Logger.Log("DACServer.log", "[DB][ERROR] BanAccountsByIp exception: " + ex.ToString());
             }
         }
+
         public static int? GetUserUidByIp(string ip)
         {
             try

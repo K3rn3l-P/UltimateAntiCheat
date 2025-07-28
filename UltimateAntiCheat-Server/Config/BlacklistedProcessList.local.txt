@@ -1,0 +1,6 @@
+# Esempio di file locale custom per blacklist processi/keyword
+# Una voce per riga. Per keyword, usa: KEYWORD: parola
+# Esempio:
+cheatengine.exe
+KEYWORD: hack
+KEYWORD: trainer

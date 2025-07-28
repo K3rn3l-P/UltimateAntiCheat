@@ -1,7 +1,121 @@
 //By AlSch092 @github
 #include "Detections.hpp"
 #include "Obscure/XorStr.hpp"
+#include "Common/SHA256.hpp"
+#include "Common/SHA256Utils.hpp"
+#include <tlhelp32.h>
+#include <algorithm>
+#include <functional>
+#include <map>
 #define OBFUSCATE(str) make_encrypted(L##str)
+
+// Utility: check if a process is in allowedParents (game, launcher, etc)
+static bool IsAllowedProcess(DWORD pid, const std::list<std::wstring>& allowedParents);
+
+// Hash a region of memory (utility for self-integrity check)
+static std::string HashMemoryRegion(const void* addr, size_t size) {
+    SHA256 sha;
+    sha.update(reinterpret_cast<const uint8_t*>(addr), size);
+    uint8_t* digest = sha.digest();
+    char buf[65] = {0};
+    for (int i = 0; i < 32; ++i) sprintf(buf + i * 2, "%02x", digest[i]);
+    return std::string(buf);
+}
+
+// Dynamic API resolver using FNV-1a hash
+static FARPROC ResolveApiByHash(HMODULE hMod, uint32_t fnvHash) {
+    if (!hMod) return nullptr;
+    auto* dos = (PIMAGE_DOS_HEADER)hMod;
+    auto* nt = (PIMAGE_NT_HEADERS)((BYTE*)hMod + dos->e_lfanew);
+    auto* exp = (PIMAGE_EXPORT_DIRECTORY)((BYTE*)hMod + nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+    auto names = (DWORD*)((BYTE*)hMod + exp->AddressOfNames);
+    auto funcs = (DWORD*)((BYTE*)hMod + exp->AddressOfFunctions);
+    auto ords = (WORD*)((BYTE*)hMod + exp->AddressOfNameOrdinals);
+    for (DWORD i = 0; i < exp->NumberOfNames; ++i) {
+        const char* name = (const char*)hMod + names[i];
+        uint32_t hash = 2166136261u;
+        for (const char* p = name; *p; ++p) hash = (hash ^ (unsigned char)*p) * 16777619u;
+        if (hash == fnvHash) {
+            return (FARPROC)((BYTE*)hMod + funcs[ords[i]]);
+        }
+    }
+    return nullptr;
+}
+
+// FNV-1a hash macro for API names
+#define FNV1A_HASH(str) ([]() { \
+    const char* s = str; \
+    uint32_t hash = 2166136261u; \
+    while (*s) hash = (hash ^ (unsigned char)*s++) * 16777619u; \
+    return hash; \
+}())
+
+// --- Offuscated API wrappers ---
+static HANDLE My_CreateToolhelp32Snapshot(DWORD flags, DWORD pid) {
+    HMODULE h = GetModuleHandleA("kernel32.dll");
+    using fn = HANDLE(WINAPI*)(DWORD, DWORD);
+    static fn p = (fn)ResolveApiByHash(h, FNV1A_HASH("CreateToolhelp32Snapshot"));
+    return p ? p(flags, pid) : NULL;
+}
+static BOOL My_Process32First(HANDLE hSnap, LPPROCESSENTRY32 lppe) {
+    HMODULE h = GetModuleHandleA("kernel32.dll");
+    using fn = BOOL(WINAPI*)(HANDLE, LPPROCESSENTRY32);
+    static fn p = (fn)ResolveApiByHash(h, FNV1A_HASH("Process32First"));
+    return p ? p(hSnap, lppe) : FALSE;
+}
+static BOOL My_Process32Next(HANDLE hSnap, LPPROCESSENTRY32 lppe) {
+    HMODULE h = GetModuleHandleA("kernel32.dll");
+    using fn = BOOL(WINAPI*)(HANDLE, LPPROCESSENTRY32);
+    static fn p = (fn)ResolveApiByHash(h, FNV1A_HASH("Process32Next"));
+    return p ? p(hSnap, lppe) : FALSE;
+}
+static BOOL My_CloseHandle(HANDLE h) {
+    HMODULE hK = GetModuleHandleA("kernel32.dll");
+    using fn = BOOL(WINAPI*)(HANDLE);
+    static fn p = (fn)ResolveApiByHash(hK, FNV1A_HASH("CloseHandle"));
+    return p ? p(h) : FALSE;
+}
+static HMODULE My_GetModuleHandleA(const char* name) {
+    HMODULE hK = GetModuleHandleA("kernel32.dll");
+    using fn = HMODULE(WINAPI*)(const char*);
+    static fn p = (fn)ResolveApiByHash(hK, FNV1A_HASH("GetModuleHandleA"));
+    return p ? p(name) : NULL;
+}
+static FARPROC My_GetProcAddress(HMODULE h, const char* name) {
+    HMODULE hK = GetModuleHandleA("kernel32.dll");
+    using fn = FARPROC(WINAPI*)(HMODULE, const char*);
+    static fn p = (fn)ResolveApiByHash(hK, FNV1A_HASH("GetProcAddress"));
+    return p ? p(h, name) : NULL;
+}
+static SIZE_T My_VirtualQuery(LPCVOID addr, PMEMORY_BASIC_INFORMATION mbi, SIZE_T sz) {
+    HMODULE hK = GetModuleHandleA("kernel32.dll");
+    using fn = SIZE_T(WINAPI*)(LPCVOID, PMEMORY_BASIC_INFORMATION, SIZE_T);
+    static fn p = (fn)ResolveApiByHash(hK, FNV1A_HASH("VirtualQuery"));
+    return p ? p(addr, mbi, sz) : 0;
+}
+static BOOL My_ReadProcessMemory(HANDLE h, LPCVOID addr, LPVOID buf, SIZE_T sz, SIZE_T* read) {
+    HMODULE hK = GetModuleHandleA("kernel32.dll");
+    using fn = BOOL(WINAPI*)(HANDLE, LPCVOID, LPVOID, SIZE_T, SIZE_T*);
+    static fn p = (fn)ResolveApiByHash(hK, FNV1A_HASH("ReadProcessMemory"));
+    return p ? p(h, addr, buf, sz, read) : FALSE;
+}
+
+// --- Challenge/response stub ---
+static std::string GetRandomTextSectionHash() {
+    // For demo: hash first 256 bytes of .text
+    HMODULE hMod = GetModuleHandleA(NULL);
+    if (!hMod) return "";
+    auto* dos = (PIMAGE_DOS_HEADER)hMod;
+    auto* nt = (PIMAGE_NT_HEADERS)((BYTE*)hMod + dos->e_lfanew);
+    auto* sec = IMAGE_FIRST_SECTION(nt);
+    for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+        if (strncmp((const char*)sec->Name, ".text", 5) == 0) {
+            return HashMemoryRegion((BYTE*)hMod + sec->VirtualAddress, 256);
+        }
+        ++sec;
+    }
+    return "";
+}
 
 Detections::Detections(Settings* s, EvidenceLocker* evidence, BOOL StartMonitor, shared_ptr<NetClient> client) : Config(s), EvidenceManager(evidence), netClient(client)
 {
@@ -246,6 +360,33 @@ void Detections::Monitor(__in LPVOID thisPtr)
     bool Monitoring = true;
     const int MonitorLoopMilliseconds = 5000;
 
+    static std::string initialMonitorHash;
+    if (initialMonitorHash.empty()) {
+        // Calcola hash della funzione Monitor (self-integrity baseline)
+        initialMonitorHash = HashMemoryRegion((void*)&Detections::Monitor, 1024); // 1024 byte dalla funzione
+    }
+    static std::string initialRandomTextHash;
+    static size_t randomTextOffset = 0;
+    if (initialRandomTextHash.empty()) {
+        // Scegli offset random nella .text section (tra 0 e 4096)
+        srand((unsigned int)time(NULL));
+        randomTextOffset = (rand() % 16) * 256; // 0, 256, 512, ... 3840
+        HMODULE hMod = GetModuleHandleA(NULL);
+        if (hMod) {
+            auto* dos = (PIMAGE_DOS_HEADER)hMod;
+            auto* nt = (PIMAGE_NT_HEADERS)((BYTE*)hMod + dos->e_lfanew);
+            auto* sec = IMAGE_FIRST_SECTION(nt);
+            for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+                if (strncmp((const char*)sec->Name, ".text", 5) == 0) {
+                    initialRandomTextHash = HashMemoryRegion((BYTE*)hMod + sec->VirtualAddress + randomTextOffset, 256);
+                    break;
+                }
+                ++sec;
+            }
+        }
+    }
+    int challengeCounter = 0;
+
     while (Monitoring)
     {
         if (Monitor == nullptr) //critical error
@@ -262,13 +403,39 @@ void Detections::Monitor(__in LPVOID thisPtr)
 
         Monitor->CheckDLLSignature(); //check signatures of any newly loaded modules
 
+        // --- INIZIO BLOCCO: detection generiche limitate ai processi critici ---
+        const std::list<std::wstring>& allowedParents = Monitor->Config->allowedParents;
+        DWORD myPid = GetCurrentProcessId();
+        bool shouldFlag = false;
+        if (IsAllowedProcess(myPid, allowedParents)) {
+            shouldFlag = true;
+        } else {
+            // Check parent
+            HANDLE hSnapshot = My_CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (hSnapshot != INVALID_HANDLE_VALUE) {
+                PROCESSENTRY32 pe;
+                pe.dwSize = sizeof(pe);
+                if (My_Process32First(hSnapshot, &pe)) {
+                    do {
+                        if (pe.th32ProcessID == myPid) {
+                            if (IsAllowedProcess(pe.th32ParentProcessID, allowedParents)) {
+                                shouldFlag = true;
+                                break;
+                            }
+                        }
+                    } while (My_Process32Next(hSnapshot, &pe));
+                }
+                My_CloseHandle(hSnapshot);
+            }
+        }
+        // --- FINE BLOCCO ---
+
         if (Monitor->Config->bCheckHypervisor)
         {
-            if (Services::IsHypervisorPresent()) //we can either block all hypervisors to try and stop SLAT/EPT manipulation, or only allow certain vendors.
+            if (Services::IsHypervisorPresent())
             {
-                string vendor = Services::GetHypervisorVendor(); //...however, many custom hypervisors will likely spoof their vendorId to be 'HyperV' or 'VMWare' 
-
-                if (vendor.size() == 0) //custom hypervisors might empty the vendor
+                string vendor = Services::GetHypervisorVendor();
+                if (vendor.size() == 0)
                 {
                     Logger::logf(Detection, "Hypervisor vendor was empty, some custom hypervisor might be hooking cpuid instruction");
                 }
@@ -280,46 +447,56 @@ void Detections::Monitor(__in LPVOID thisPtr)
                 {
                     Logger::logf(Detection, "Hypervisor was present with unknown/non-standard vendor: %s.", vendor.c_str());
                 }
-
                 Monitor->EvidenceManager->AddFlagged(DetectionFlags::HYPERVISOR);
             }
         }
 
         if (Monitor->Config->bCheckIntegrity)
         {
-            if (Monitor->GetIntegrityChecker()->IsTLSCallbackStructureModified()) //check various aspects of the TLS callback structure for modifications
+            if (Monitor->GetIntegrityChecker()->IsTLSCallbackStructureModified())
             {
-                Logger::logf(Detection, "Found modified TLS callback structure section (atleast one aspect of the TLS data directory structure was modified)");
-                Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                if (shouldFlag)
+                {
+                    Logger::logf(Detection, "Found modified TLS callback structure section (atleast one aspect of the TLS data directory structure was modified)");
+                    Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                }
             }
-
-            if (Monitor->IsSectionHashUnmatching(CachedTextSectionAddress, CachedTextSectionSize, ".text")) //compare hashes of .text for modifications
+            if (Monitor->IsSectionHashUnmatching(CachedTextSectionAddress, CachedTextSectionSize, ".text"))
             {
-                Logger::logf(Detection, "Found modified .text section (or you're debugging with software breakpoints)!\n");
-                Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                if (shouldFlag)
+                {
+                    Logger::logf(Detection, "Found modified .text section (or you're debugging with software breakpoints)!\n");
+                    Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                }
             }
-
-            if (Monitor->IsSectionHashUnmatching(CachedRDataSectionAddress, CachedRDataSectionSize, ".rdata")) //compare hashes of .text for modifications
+            if (Monitor->IsSectionHashUnmatching(CachedRDataSectionAddress, CachedRDataSectionSize, ".rdata"))
             {
-                Logger::logf(Detection, "Found modified .rdata section!\n");
-                Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                if (shouldFlag)
+                {
+                    Logger::logf(Detection, "Found modified .rdata section!\n");
+                    Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                }
             }
-
-            if (!Monitor->GetIntegrityChecker()->CheckFileIntegrityFromDisc()) //check .text of file on disc versus runtime process - this fills the gap of gathering .text hashes at program startup and comparing to that
+            if (!Monitor->GetIntegrityChecker()->CheckFileIntegrityFromDisc())
             {
-                Logger::logf(Detection, ".text section of file on disc differs from runtime process!");
-                Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                if (shouldFlag)
+                {
+                    Logger::logf(Detection, ".text section of file on disc differs from runtime process!");
+                    Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                }
             }
         }
 
-        if (Monitor->GetIntegrityChecker()->IsModuleModified(L"WINTRUST.dll")) //check hashes of wintrust.dll for signing-related hooks
+        if (Monitor->GetIntegrityChecker()->IsModuleModified(L"WINTRUST.dll"))
         {
-            Logger::logf(Detection, "Found modified .text section in WINTRUST.dll!"); //checking .rdata would be helpful too
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+            if (shouldFlag)
+            {
+                Logger::logf(Detection, "Found modified .text section in WINTRUST.dll!");
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+            }
         }
 
         vector<uint64_t> mappedRegions = Monitor->DetectManualMapping();
-
         if (mappedRegions.size() > 0)
         {
             for (uint64_t mappedRegionAddress : mappedRegions)
@@ -329,11 +506,10 @@ void Detections::Monitor(__in LPVOID thisPtr)
             }
         }
 
-        if (Monitor->GetConfig() != nullptr && Monitor->GetConfig()->bEnforceDSE) //check for unsigned drivers loaded
+        if (Monitor->GetConfig() != nullptr && Monitor->GetConfig()->bEnforceDSE)
         {
             Monitor->SetUnsignedLoadedDriversList(Monitor->GetServiceManager()->GetUnsignedDrivers(Monitor->PassedCertCheckDrivers));
-
-            if (Monitor->GetUnsignedLoadedDriversList().size() > 0) //found one or more unsigned, non-whitelisted drivers loaded
+            if (Monitor->GetUnsignedLoadedDriversList().size() > 0)
             {
                 for (wstring driver : Monitor->GetUnsignedLoadedDriversList())
                 {
@@ -342,56 +518,70 @@ void Detections::Monitor(__in LPVOID thisPtr)
             }
         }
 
-        if (Monitor->IsBlacklistedProcessRunning()) //external applications running on machine
+        if (Monitor->IsBlacklistedProcessRunning())
         {
             Logger::logf(Detection, "Found blacklisted process!");
             Monitor->EvidenceManager->AddFlagged(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
-
-            // Invio immediato al server
             auto netClientWeak = Monitor->GetNetClient();
             if (auto netClient = netClientWeak.lock()) {
                 netClient->FlagCheater(DetectionFlags::EXTERNAL_ILLEGAL_PROGRAM);
             }
         }
 
-        //make sure ws2_32.dll is actually loaded if this gives an error, on my build the dll is not loaded but we'll pretend it is
-        if (Monitor->DoesFunctionAppearHooked("ws2_32.dll", "send") || Monitor->DoesFunctionAppearHooked("ws2_32.dll", "recv"))   //ensure you use this routine on functions that don't have jumps or calls as their first byte
+        if (Monitor->DoesFunctionAppearHooked("ws2_32.dll", "send") || Monitor->DoesFunctionAppearHooked("ws2_32.dll", "recv"))
         {
-            Logger::logf(Detection, "Networking WINAPI (send | recv) was hooked!\n"); //WINAPI hooks doesn't always determine someone is cheating since AV and other software can write the hooks
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::DLL_TAMPERING);
+            if (shouldFlag)
+            {
+                Logger::logf(Detection, "Networking WINAPI (send | recv) was hooked!\n");
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::DLL_TAMPERING);
+            }
         }
 
-        if (Monitor->GetIntegrityChecker()->IsUnknownModulePresent()) //authenticode call and check against whitelisted module list
+        if (Monitor->GetIntegrityChecker()->IsUnknownModulePresent())
         {
-            Logger::logf(Detection, "Found at least one unsigned dll loaded : We ideally only want verified, signed dlls in our application!");
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::INJECTED_ILLEGAL_PROGRAM);
+            if (shouldFlag)
+            {
+                Logger::logf(Detection, "Found at least one unsigned dll loaded : We ideally only want verified, signed dlls in our application!");
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::INJECTED_ILLEGAL_PROGRAM);
+            }
         }
 
-        if (Services::IsTestsigningEnabled() || Services::IsDebugModeEnabled()) //test signing enabled, self-signed drivers
+        if (Services::IsTestsigningEnabled() || Services::IsDebugModeEnabled())
         {
-            Logger::logf(Detection, "Testsigning or debugging mode is enabled! In most cases we don't allow the game/process to continue if testsigning is enabled.");
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::UNSIGNED_DRIVERS);
+            if (shouldFlag)
+            {
+                Logger::logf(Detection, "Testsigning or debugging mode is enabled! In most cases we don't allow the game/process to continue if testsigning is enabled.");
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::UNSIGNED_DRIVERS);
+            }
         }
 
-        if (Monitor->Detections::DoesIATContainHooked()) //iat hook check
+        if (Monitor->Detections::DoesIATContainHooked())
         {
-            Logger::logf(Detection, "IAT was hooked! One or more functions lead to addresses outside their respective modules!\n");
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::BAD_IAT);
+            if (shouldFlag)
+            {
+                Logger::logf(Detection, "IAT was hooked! One or more functions lead to addresses outside their respective modules!\n");
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::BAD_IAT);
+            }
         }
 
-        if (Detections::IsTextSectionWritable()) //page protections check, can be made more granular or loop over all mem pages
+        if (Detections::IsTextSectionWritable())
         {
-            Logger::logf(Detection, ".text section was writable, which means someone re-re-mapped our memory regions! (or you ran this in DEBUG build)");
-
-#ifndef _DEBUG           //in debug build we are not remapping, and software breakpoints in VS may cause page protections to be writable
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::PAGE_PROTECTIONS);
+#ifndef _DEBUG
+            if (shouldFlag)
+            {
+                Logger::logf(Detection, ".text section was writable, which means someone re-re-mapped our memory regions! (or you ran this in DEBUG build)");
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::PAGE_PROTECTIONS);
+            }
 #endif
         }
 
-        if (Detections::CheckOpenHandles()) //open handles to our process check
+        if (Detections::CheckOpenHandles())
         {
-            Logger::logf(Detection, "Found open process handles to our process from other processes");
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::OPEN_PROCESS_HANDLES);
+            if (shouldFlag)
+            {
+                Logger::logf(Detection, "Found open process handles to our process from other processes");
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::OPEN_PROCESS_HANDLES);
+            }
         }
 
         if (Monitor->IsBlacklistedWindowPresent())
@@ -401,7 +591,55 @@ void Detections::Monitor(__in LPVOID thisPtr)
         }
 
         auto _future = std::async(std::launch::async, &EvidenceLocker::PushAllEvidence, Monitor->EvidenceManager); //push any newly found flags to server
-        Sleep(MonitorLoopMilliseconds);
+
+        // --- Self-integrity check runtime ---
+        std::string currentMonitorHash = HashMemoryRegion((void*)&Detections::Monitor, 1024);
+        if (currentMonitorHash != initialMonitorHash) {
+            Logger::logf(Detection, "Monitor function code in memory was modified at runtime!");
+            Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+            // Invio immediato della detection al server
+            auto netClientWeak = Monitor->GetNetClient();
+            if (auto netClient = netClientWeak.lock()) {
+                netClient->FlagCheater(DetectionFlags::CODE_INTEGRITY);
+            }
+        }
+
+        // --- Self-integrity check random .text section ---
+        if (!initialRandomTextHash.empty()) {
+            HMODULE hMod = GetModuleHandleA(NULL);
+            if (hMod) {
+                auto* dos = (PIMAGE_DOS_HEADER)hMod;
+                auto* nt = (PIMAGE_NT_HEADERS)((BYTE*)hMod + dos->e_lfanew);
+                auto* sec = IMAGE_FIRST_SECTION(nt);
+                for (int i = 0; i < nt->FileHeader.NumberOfSections; ++i) {
+                    if (strncmp((const char*)sec->Name, ".text", 5) == 0) {
+                        std::string currentRandomTextHash = HashMemoryRegion((BYTE*)hMod + sec->VirtualAddress + randomTextOffset, 256);
+                        if (currentRandomTextHash != initialRandomTextHash) {
+                            Logger::logf(Detection, "Random .text section region was modified at runtime!");
+                            Monitor->EvidenceManager->AddFlagged(DetectionFlags::CODE_INTEGRITY);
+                            auto netClientWeak = Monitor->GetNetClient();
+                            if (auto netClient = netClientWeak.lock()) {
+                                netClient->FlagCheater(DetectionFlags::CODE_INTEGRITY);
+                            }
+                        }
+                        break;
+                    }
+                    ++sec;
+                }
+            }
+        }
+
+        // --- API call obfuscation example ---
+        HMODULE hKernel32 = GetModuleHandleA("kernel32.dll");
+        // FNV-1a("Sleep") = 0xa7a6cfa7
+        using SleepFunc = VOID(WINAPI*)(DWORD);
+        SleepFunc pSleep = (SleepFunc)ResolveApiByHash(hKernel32, 0xa7a6cfa7);
+        if (pSleep) pSleep(MonitorLoopMilliseconds); else Sleep(MonitorLoopMilliseconds);
+
+        // --- Dynamic blacklist update periodic ---
+        if (challengeCounter % 60 == 0) { // ogni ~5min
+            Monitor->UpdateBlacklistsFromServer();
+        }
     }
 }
 
@@ -576,7 +814,7 @@ bool Detections::IsBlacklistedProcessRunning() const
 {
     bool foundBlacklistedProcess = false;
 
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    HANDLE hSnapshot = My_CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE)
     {
         Logger::logf(Err, "Failed to create snapshot of processes. Error code: %d @ Detections::IsBlacklistedProcessRunning\n", GetLastError());
@@ -585,10 +823,10 @@ bool Detections::IsBlacklistedProcessRunning() const
 
     PROCESSENTRY32 pe32;
     pe32.dwSize = sizeof(PROCESSENTRY32);
-    if (!Process32First(hSnapshot, &pe32))
+    if (!My_Process32First(hSnapshot, &pe32))
     {
         Logger::logf(Err, "Failed to get first process. Error code:  %d @ Detections::IsBlacklistedProcessRunning\n", GetLastError());
-        CloseHandle(hSnapshot);
+        My_CloseHandle(hSnapshot);
         return false;
     }
 
@@ -615,12 +853,11 @@ bool Detections::IsBlacklistedProcessRunning() const
                 break;
             }
         }
-    } while (Process32Next(hSnapshot, &pe32));
+    } while (My_Process32Next(hSnapshot, &pe32));
 
-    CloseHandle(hSnapshot);
+    My_CloseHandle(hSnapshot);
     return foundBlacklistedProcess;
 }
-
 
 /*
 *   DoesFunctionAppearHooked - Checks if first bytes of a routine are a jump or call. Please make sure the function you use with this doesnt normally start with a jump or call.
@@ -636,7 +873,7 @@ bool Detections::DoesFunctionAppearHooked(__in const char* moduleName, __in cons
 
     bool FunctionPreambleHooked = false;
 
-    HMODULE hMod = GetModuleHandleA(moduleName);
+    HMODULE hMod = My_GetModuleHandleA(moduleName);
 
     if (hMod == NULL)
     {
@@ -644,7 +881,7 @@ bool Detections::DoesFunctionAppearHooked(__in const char* moduleName, __in cons
         return false;
     }
 
-    UINT64 AddressFunction = (UINT64)GetProcAddress(hMod, functionName);
+    UINT64 AddressFunction = (UINT64)My_GetProcAddress(hMod, functionName);
 
     if (AddressFunction == NULL)
     {
@@ -735,7 +972,7 @@ UINT64 Detections::IsTextSectionWritable()
 
     UINT64 max_addr = textAddr + Process::GetTextSectionSize(GetModuleHandle(NULL));
 
-    while ((result = VirtualQuery((LPCVOID)address, &mbi, sizeof(mbi))) != 0)     //Loop through all pages in .text
+    while ((result = My_VirtualQuery((LPCVOID)address, &mbi, sizeof(mbi))) != 0)     //Loop through all pages in .text
     {
         if (address >= max_addr)
             break;
@@ -1533,7 +1770,6 @@ void Detections::InitializeBlacklistedProcessesList()
     }
 }
 
-
 /*
     FindBlacklistedProgramsThroughByteScan(DWORD pid) - check process `pid` for specific byte patterns which implicate it of possibly being a bad actor process
     Used in combination with WMI process load callbacks (MonitorProcessCreation), and more checks on a process should be added to ensure its not a false positive
@@ -1638,8 +1874,6 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
         }
     }
 
-    Logger::logf(Info, "Monitoring multiple registry keys...");
-
     bool monitoringKeys = true;
 
     while (monitoringKeys)
@@ -1653,9 +1887,34 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
         {
             int index = waitResult - WAIT_OBJECT_0; //determine which event was signaled
 
-            Logger::logf(Detection, "Key %d value changed!", index);
-
-            Monitor->EvidenceManager->AddFlagged(DetectionFlags::REGISTRY_KEY_MODIFICATIONS);
+            const std::list<std::wstring>& allowedParents = Monitor->Config->allowedParents;
+            DWORD myPid = GetCurrentProcessId();
+            bool shouldFlag = false; // <-- forza la detection sempre
+            if (IsAllowedProcess(myPid, allowedParents)) {
+                shouldFlag = true;
+            }
+            else {
+                // Check parent
+                HANDLE hSnapshot = My_CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                if (hSnapshot != INVALID_HANDLE_VALUE) {
+                    PROCESSENTRY32 pe;
+                    pe.dwSize = sizeof(pe);
+                    if (My_Process32First(hSnapshot, &pe)) {
+                        do {
+                            if (pe.th32ProcessID == myPid) {
+                                if (IsAllowedProcess(pe.th32ParentProcessID, allowedParents)) {
+                                    shouldFlag = true;
+                                    break;
+                                }
+                            }
+                        } while (My_Process32Next(hSnapshot, &pe));
+                    }
+                    My_CloseHandle(hSnapshot);
+                }
+            }
+            if (shouldFlag) {
+                Monitor->EvidenceManager->AddFlagged(DetectionFlags::REGISTRY_KEY_MODIFICATIONS);
+            }
 
             result = RegNotifyChangeKeyValue(hKeys[index], TRUE, filter, hEvents[index], TRUE);   //re register the notification for the key
 
@@ -1666,7 +1925,6 @@ void Detections::MonitorImportantRegistryKeys(__in LPVOID thisPtr)
         }
         else
         {
-            //Logger::logf(Warning, "Unexpected wait result: %ld", waitResult); //this message will display often, commented out to suppress it
             continue;
         }
 
@@ -1705,7 +1963,7 @@ vector<uint64_t> Detections::DetectManualMapping()
     uint64_t CurrentRegionAddr = 0;  //starting address to scan from
     uintptr_t userModeLimit = 0x00007FFFFFFFFFFF; 	// 64-bit user-mode memory typically ends around 0x00007FFFFFFFFFFF
 
-    while ((uintptr_t)CurrentRegionAddr < userModeLimit && VirtualQuery((LPCVOID)CurrentRegionAddr, &mbi, sizeof(mbi)) == sizeof(mbi)) //loop through all memory regions in the process
+    while ((uintptr_t)CurrentRegionAddr < userModeLimit && My_VirtualQuery((LPCVOID)CurrentRegionAddr, &mbi, sizeof(mbi)) == sizeof(mbi)) //loop through all memory regions in the process
     {
         if (mbi.State != MEM_COMMIT) //skip memory regions that are reserved or free
         {
@@ -1751,7 +2009,7 @@ vector<uint64_t> Detections::DetectManualMapping()
                             uint64_t possibleTextSectionAddress = (uint64_t)(mbi.BaseAddress);
 
                             //maybe i'll change this to memcpy_s() afterwards - this works fine currently and it's late at night, so maybe next time.
-                            if (ReadProcessMemory(GetCurrentProcess(), (LPCVOID)possibleTextSectionAddress, bufferPossibleMappedSection, sizeof(bufferPossibleMappedSection), NULL))
+                            if (My_ReadProcessMemory(GetCurrentProcess(), (LPCVOID)possibleTextSectionAddress, bufferPossibleMappedSection, sizeof(bufferPossibleMappedSection), NULL))
                             {
                                 for (int i = 0; i < sizeof(bufferPossibleMappedSection) - 4; i++) // many manual mappers erase headers by replacing them with all 00's
                                 {
@@ -1787,4 +2045,47 @@ vector<uint64_t> Detections::DetectManualMapping()
 bool Detections::WasProcessNotRemapped()
 {
     return false; //this will be finished soon...
+}
+
+/*
+    Utility: check if a process is in allowedParents (game, launcher, etc)
+*/
+static bool IsAllowedProcess(DWORD pid, const std::list<std::wstring>& allowedParents) {
+    if (pid == 0) return false;
+    std::wstring procName = Process::GetProcessName(pid);
+    for (const auto& allowed : allowedParents) {
+        if (_wcsicmp(procName.c_str(), allowed.c_str()) == 0)
+            return true;
+    }
+    return false;
+}
+
+/*
+    UpdateBlacklistsFromServer - fetch new process/keyword lists from a remote URL (JSON or line-based)
+*/
+void Detections::UpdateBlacklistsFromServer() {
+    std::string url = "https://raw.githubusercontent.com/AlSch092/UltimateAntiCheat/refs/heads/main/MiscFiles/BlacklistedProcessList.txt";
+    vector<string> responseHeaders;
+    string response = HttpClient::ReadWebPage(url.c_str(), {}, "", responseHeaders);
+    if (response.size() == 0) return;
+    std::stringstream ss(response);
+    std::string line;
+    BlacklistedProcesses.clear();
+    BlacklistedKeywords.clear();
+    while (std::getline(ss, line)) {
+        if (!line.empty() && line[0] != '#') {
+            if (line.rfind("KEYWORD:", 0) == 0) {
+                std::string keyword = line.substr(8);
+                // Rimuovi eventuali spazi
+                keyword.erase(0, keyword.find_first_not_of(" \t"));
+                if (!keyword.empty()) {
+                    std::wstring wkeyword(keyword.begin(), keyword.end());
+                    BlacklistedKeywords.push_back(wkeyword);
+                }
+            } else {
+                std::wstring wline(line.begin(), line.end());
+                BlacklistedProcesses.push_back(wline);
+            }
+        }
+    }
 }
