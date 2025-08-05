@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 # Log file path (modifica se vuoi salvarlo altrove)
-$logFile = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\postbuild_hash_update.log"
+$logFile = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\log\postbuild_hash_update.log"
 function Write-Log($msg) {
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     "$timestamp $msg" | Out-File -FilePath $logFile -Append
@@ -46,6 +46,36 @@ if ($missing.Count -gt 0) {
     exit 1
 }
 
+# Funzione sicura per aggiornare i file
+function Update-FileSafely {
+    param(
+        [string]$TargetPath,
+        [string]$NewContent
+    )
+    $tmp = "$TargetPath.tmp"
+    try {
+        $NewContent | Set-Content $tmp -Encoding UTF8
+        # Verifica che il file temporaneo non sia vuoto e valido
+        $tmpContent = (Get-Content $tmp -Raw)
+        if ($tmpContent.Trim().Length -eq 0) {
+            throw "File temporaneo vuoto, non aggiorno l'originale!"
+        }
+        # Verifica che il contenuto abbia tutti gli hash
+        foreach ($h in $hashes.Values) {
+            if ($tmpContent -notmatch $h) {
+                throw "File temporaneo non contiene l'hash atteso: $h"
+            }
+        }
+        Move-Item -Force $tmp $TargetPath
+        Write-Log "$TargetPath aggiornato con successo."
+    } catch {
+        Write-Log ("[ERROR] Aggiornamento fallito per {0}: {1}" -f $TargetPath, $_)
+        if (Test-Path $tmp) { Remove-Item $tmp -Force }
+        pause
+        exit 1
+    }
+}
+
 # Percorso al file header da aggiornare
 $headerPath = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\Common\sha256_hashes.hpp"
 
@@ -61,9 +91,7 @@ const std::string expectedDACSha256 = "$($hashes['game.exe'])";
 
 "@
 
-# Scrivi il file header
-$headerContent | Set-Content $headerPath -Encoding UTF8
-Write-Log "SHA256 aggiornati in sha256_hashes.hpp"
+Update-FileSafely -TargetPath $headerPath -NewContent $headerContent
 
 # Percorso al file C# da aggiornare
 $csPath = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\Network\ExpectedHashes.cs"
@@ -82,9 +110,7 @@ namespace UACServer.Network
 }
 "@ -replace '""', '"'
 
-# Scrivi il file C#
-$csContent | Set-Content $csPath -Encoding UTF8
-Write-Log "SHA256 aggiornati in ExpectedHashes.cs"
+Update-FileSafely -TargetPath $csPath -NewContent $csContent
 
 # Verifica post-scrittura degli hash
 try {

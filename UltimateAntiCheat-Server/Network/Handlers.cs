@@ -5,12 +5,57 @@ using System.Text;
 using System.IO;
 using System.Security.Cryptography;
 using Newtonsoft.Json;
+using System.IO.Compression;
 
 namespace UACServer.Network
 {
     internal class Handlers
     {
-        public static bool HandleClientHello(AntiCheatClient c, PacketReader p, out string failReason, out bool alreadyLogged) //hardwareID, hostname, MAC addr as fields
+        // Limite massimo estrazioni special.patch
+        private static int SpecialPatchExtractCount = 0;
+        private const int MaxSpecialPatchExtract = 3;
+
+        // Funzione di sincronizzazione automatica hash
+        private static bool TrySyncHashFolder()
+        {
+            if (SpecialPatchExtractCount >= MaxSpecialPatchExtract)
+                return false;
+            try
+            {
+                string patchPath = @"C:\xampp\htdocs\shaiya\patch\special.patch";
+                string hashFolder = @"C:\DAC-Server\hash";
+                string updaterExe = Path.Combine(hashFolder, "Updater.exe");
+                if (File.Exists(patchPath))
+                {
+                    // Cancella tutti i file nella cartella hash tranne Updater.exe
+                    if (Directory.Exists(hashFolder))
+                    {
+                        foreach (var file in Directory.GetFiles(hashFolder))
+                        {
+                            if (string.Equals(Path.GetFileName(file), "Updater.exe", StringComparison.OrdinalIgnoreCase))
+                                continue; // NON eliminare Updater.exe
+                            try { File.Delete(file); } catch { }
+                        }
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(hashFolder);
+                    }
+                    // Estrai senza parametro overwrite
+                    ZipFile.ExtractToDirectory(patchPath, hashFolder);
+                    Logger.LogInfoTag("DACServer.log", $"[SYNC] Estratta special.patch in {hashFolder}");
+                    SpecialPatchExtractCount++;
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("DACServer.log", $"[ERROR][SYNC] Impossibile estrarre special.patch: {ex}");
+            }
+            return false;
+        }
+
+        public static bool HandleClientHello(AntiCheatClient c, PacketReader p, out string failReason, out bool alreadyLogged, bool hasRetriedSync = false) //hardwareID, hostname, MAC addr as fields
         {
             failReason = null;
             alreadyLogged = false;
@@ -55,7 +100,13 @@ namespace UACServer.Network
             if (!string.Equals(exeHash, ExpectedHashes.X32Exe, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash x32.exe non valido: {exeHash}";
-                Logger.Log("DACServer.log", $"[SECURITY] Hash x32.exe non valido da {c.ip_addr}: {exeHash}");
+                // Tenta sincronizzazione automatica
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    // Riprova la validazione dopo la sync
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY] Hash x32.exe non valido da {c.ip_addr}: {exeHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidExeHash",
@@ -76,7 +127,13 @@ namespace UACServer.Network
             if (!File.Exists(x32Path))
             {
                 failReason = $"File x32.exe non trovato nella cartella hash: {x32Path}";
-                Logger.Log("DACServer.log", $"[SECURITY] File x32.exe non trovato nella cartella hash: {x32Path}");
+                // Tenta sincronizzazione automatica
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    // Riprova la validazione dopo la sync
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY] File x32.exe non trovato nella cartella hash: {x32Path}");
                 alreadyLogged = true;
                 return false;
             }
@@ -90,7 +147,13 @@ namespace UACServer.Network
             if (!string.Equals(exeHash, realHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}";
-                Logger.Log("DACServer.log", $"[SECURITY] Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}");
+                // Tenta sincronizzazione automatica
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    // Riprova la validazione dopo la sync
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY] Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidExeHashRealFile",
@@ -110,7 +173,11 @@ namespace UACServer.Network
             if (!File.Exists(updaterPath))
             {
                 failReason = $"File Updater.exe non trovato nella cartella hash: {updaterPath}";
-                Logger.Log("DACServer.log", $"[SECURITY] File Updater.exe non trovato nella cartella hash: {updaterPath}");
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] File Updater.exe non trovato nella cartella hash: {updaterPath}");
                 alreadyLogged = true;
                 return false;
             }
@@ -124,7 +191,11 @@ namespace UACServer.Network
             if (!string.Equals(updaterHash, realUpdaterHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}";
-                Logger.Log("DACServer.log", $"[SECURITY] Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}");
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidUpdaterHashRealFile",
@@ -144,7 +215,11 @@ namespace UACServer.Network
             if (!File.Exists(duffPath))
             {
                 failReason = $"File duff.dll non trovato nella cartella hash: {duffPath}";
-                Logger.Log("DACServer.log", $"[SECURITY] File duff.dll non trovato nella cartella hash: {duffPath}");
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] File duff.dll non trovato nella cartella hash: {duffPath}");
                 alreadyLogged = true;
                 return false;
             }
@@ -158,7 +233,11 @@ namespace UACServer.Network
             if (!string.Equals(duffDllHash, realDuffHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}";
-                Logger.Log("DACServer.log", $"[SECURITY] Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}");
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidDuffDllHashRealFile",
@@ -178,7 +257,11 @@ namespace UACServer.Network
             if (!File.Exists(dacPath))
             {
                 failReason = $"File game.exe non trovato nella cartella hash: {dacPath}";
-                Logger.Log("DACServer.log", $"[SECURITY] File game.exe non trovato nella cartella hash: {dacPath}");
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] File game.exe non trovato nella cartella hash: {dacPath}");
                 alreadyLogged = true;
                 return false;
             }
@@ -192,7 +275,11 @@ namespace UACServer.Network
             if (!string.Equals(dacHash, realDacHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}";
-                Logger.Log("DACServer.log", $"[SECURITY] Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}");
+                if (!hasRetriedSync && TrySyncHashFolder())
+                {
+                    return HandleClientHello(c, p, out failReason, out alreadyLogged, true);
+                }
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidDacHashRealFile",
@@ -208,7 +295,7 @@ namespace UACServer.Network
             }
 
             // Log unico per hash validati
-            Logger.Log("DACServer.log", $"[SECURITY] Ricevuti e validati hash di x32.exe, Updater.exe, duff.dll, game.exe da {c.ip_addr}");
+            Logger.LogHashCheck("DACServer.log", $"[HASH_CHECK] Ricevuti e validati hash di x32.exe, Updater.exe, duff.dll, game.exe da {c.ip_addr}");
             DatabaseLogger.LogEvent(
                 c.id,
                 "ValidHashes",
@@ -230,7 +317,9 @@ namespace UACServer.Network
                 Directory.CreateDirectory(sessionDir);
             string safeIp = SanitizeFileName(info.Ip);
             string safeGameCode = SanitizeFileName(info.GameCode);
-            string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+            string safeHw = SanitizeFileName(info.HardwareId);
+            string safeMac = SanitizeFileName(info.Mac);
+            string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}_{safeHw}_{safeMac}_{info.ClientId}.json");
             if (!File.Exists(sessionFile))
             {
                 File.WriteAllText(sessionFile, JsonConvert.SerializeObject(info, Formatting.Indented));
@@ -238,9 +327,8 @@ namespace UACServer.Network
 
             return true;
         }
-        // --- FINE - VALIDAZIONE HASH ---
 
-        public static bool HandleClientHashCheck(AntiCheatClient c, PacketReader p, out string failReason, out bool alreadyLogged)
+        public static bool HandleClientHashCheck(AntiCheatClient c, PacketReader p, out string failReason, out bool alreadyLogged, bool hasRetriedSync = false)
         {
             failReason = null;
             alreadyLogged = false;
@@ -264,7 +352,7 @@ namespace UACServer.Network
             if (!string.Equals(exeHash, ExpectedHashes.X32Exe, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash x32.exe non valido: {exeHash}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] Hash x32.exe non valido da {c.ip_addr}: {exeHash}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash x32.exe non valido da {c.ip_addr}: {exeHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidExeHash_Periodic",
@@ -282,13 +370,13 @@ namespace UACServer.Network
             if (!File.Exists(x32Path))
             {
                 failReason = $"File x32.exe non trovato nella cartella hash: {x32Path}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] File x32.exe non trovato nella cartella hash: {x32Path}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] File x32.exe non trovato nella cartella hash: {x32Path}");
                 alreadyLogged = true;
                 return false;
             }
             string realHash;
             using (var stream = File.OpenRead(x32Path))
-            using (var sha256 = SHA256.Create())
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
             {
                 var hashBytes = sha256.ComputeHash(stream);
                 realHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
@@ -296,7 +384,7 @@ namespace UACServer.Network
             if (!string.Equals(exeHash, realHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash x32.exe non corrisponde al file reale nella cartella hash. Atteso: {realHash}, Ricevuto: {exeHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidExeHashRealFile_Periodic",
@@ -315,13 +403,13 @@ namespace UACServer.Network
             if (!File.Exists(updaterPath))
             {
                 failReason = $"File Updater.exe non trovato nella cartella hash: {updaterPath}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] File Updater.exe non trovato nella cartella hash: {updaterPath}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] File Updater.exe non trovato nella cartella hash: {updaterPath}");
                 alreadyLogged = true;
                 return false;
             }
             string realUpdaterHash;
             using (var stream = File.OpenRead(updaterPath))
-            using (var sha256 = SHA256.Create())
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
             {
                 var hashBytes = sha256.ComputeHash(stream);
                 realUpdaterHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
@@ -329,7 +417,7 @@ namespace UACServer.Network
             if (!string.Equals(updaterHash, realUpdaterHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash Updater.exe non corrisponde al file reale nella cartella hash. Atteso: {realUpdaterHash}, Ricevuto: {updaterHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidUpdaterHashRealFile_Periodic",
@@ -348,13 +436,13 @@ namespace UACServer.Network
             if (!File.Exists(duffPath))
             {
                 failReason = $"File duff.dll non trovato nella cartella hash: {duffPath}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] File duff.dll non trovato nella cartella hash: {duffPath}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] File duff.dll non trovato nella cartella hash: {duffPath}");
                 alreadyLogged = true;
                 return false;
             }
             string realDuffHash;
             using (var stream = File.OpenRead(duffPath))
-            using (var sha256 = SHA256.Create())
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
             {
                 var hashBytes = sha256.ComputeHash(stream);
                 realDuffHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
@@ -362,7 +450,7 @@ namespace UACServer.Network
             if (!string.Equals(duffDllHash, realDuffHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash duff.dll non corrisponde al file reale nella cartella hash. Atteso: {realDuffHash}, Ricevuto: {duffDllHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidDuffDllHashRealFile_Periodic",
@@ -381,13 +469,13 @@ namespace UACServer.Network
             if (!File.Exists(dacPath))
             {
                 failReason = $"File game.exe non trovato nella cartella hash: {dacPath}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] File game.exe non trovato nella cartella hash: {dacPath}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] File game.exe non trovato nella cartella hash: {dacPath}");
                 alreadyLogged = true;
                 return false;
             }
             string realDacHash;
             using (var stream = File.OpenRead(dacPath))
-            using (var sha256 = SHA256.Create())
+            using (var sha256 = System.Security.Cryptography.SHA256.Create())
             {
                 var hashBytes = sha256.ComputeHash(stream);
                 realDacHash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToUpperInvariant();
@@ -395,7 +483,7 @@ namespace UACServer.Network
             if (!string.Equals(dacHash, realDacHash, StringComparison.OrdinalIgnoreCase))
             {
                 failReason = $"Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}";
-                Logger.Log("DACServer.log", $"[HASH_CHECK] Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][Hash] Hash game.exe non corrisponde al file reale nella cartella hash. Atteso: {realDacHash}, Ricevuto: {dacHash}");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "InvalidDacHashRealFile_Periodic",
@@ -410,7 +498,7 @@ namespace UACServer.Network
                 return false;
             }
 
-            Logger.Log("DACServer.log", $"[HASH_CHECK] Ricevuti e validati hash periodici di x32.exe, Updater.exe, duff.dll, game.exe da {c.ip_addr}");
+            Logger.LogHashCheck("DACServer.log", $"[HASH_CHECK] Ricevuti e validati hash periodici di x32.exe, Updater.exe, duff.dll, game.exe da {c.ip_addr}");
             DatabaseLogger.LogEvent(
                 c.id,
                 "ValidHashes_Periodic",
@@ -465,7 +553,9 @@ namespace UACServer.Network
                 Directory.CreateDirectory(sessionDir);
             string safeIp = SanitizeFileName(info.Ip);
             string safeGameCode = SanitizeFileName(info.GameCode);
-            string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+            string safeHw = SanitizeFileName(info.HardwareId);
+            string safeMac = SanitizeFileName(info.Mac);
+            string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}_{safeHw}_{safeMac}_{info.ClientId}.json");
 
             // Se il file non esiste, lo crea (primo hello)
             if (!File.Exists(sessionFile))
@@ -478,7 +568,7 @@ namespace UACServer.Network
             if (!info.Equals(saved))
             {
                 failReason = "Mismatch tra info periodico e session iniziale";
-                Logger.Log("DACServer.log", $"[SECURITY] Client info periodic mismatch: {info.Ip} (expected: {JsonConvert.SerializeObject(saved)}, got: {JsonConvert.SerializeObject(info)})");
+                Logger.LogDetection("DACServer.log", $"[SECURITY] Client info periodic mismatch: {info.Ip} (expected: {JsonConvert.SerializeObject(saved)}, got: {JsonConvert.SerializeObject(info)})");
                 DatabaseLogger.LogDetection(
                     c.id,
                     "ClientInfoMismatch",
@@ -503,13 +593,15 @@ namespace UACServer.Network
                 string sessionDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session");
                 string safeIp = SanitizeFileName(c.ip_addr?.ToString());
                 string safeGameCode = SanitizeFileName(c.gamecode);
-                string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}.json");
+                string safeHw = SanitizeFileName(c.hardware_id);
+                string safeMac = SanitizeFileName(c.mac_address);
+                string sessionFile = Path.Combine(sessionDir, $"{safeIp}_{safeGameCode}_{safeHw}_{safeMac}_{c.id}.json");
                 if (File.Exists(sessionFile))
                     File.Delete(sessionFile);
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", $"[ERROR] Impossibile eliminare il file sessione: {ex}");
+                Logger.LogError("DACServer.log", $"[ERROR] Impossibile eliminare il file sessione: {ex}");
             }
         }
 
@@ -549,7 +641,6 @@ namespace UACServer.Network
             return new string(output);
         }
 
-
         public static bool HandleClientHeartbeat(AntiCheatClient c, string heartbeat)
         {
             byte Transformer = 0x18;
@@ -586,13 +677,13 @@ namespace UACServer.Network
             if (AnticheatServer.Detections.TryGetValue(flag, out reason))
             {
                 DatabaseLogger.LogDetection(c.id, flag.ToString(), reason);
-                Logger.Log("DACServer.log", $"[DETECTION] Client #{Convert.ToString(c.id)} was flagged for {reason}");
+                Logger.LogDetection("DACServer.log", $"[DETECTION] Client #{Convert.ToString(c.id)} was flagged for {reason}");
             }
             else
             {
-                Logger.Log("DACServer.log", $"[ERROR] Detection flag {flag} non trovato nel dizionario!");
+                Logger.LogError("DACServer.log", $"[ERROR] Detection flag {flag} non trovato nel dizionario!");
                 DatabaseLogger.LogDetection(c.id, flag.ToString(), "Unknown detection flag");
-                Logger.Log("DACServer.log", $"[DETECTION] Client #{Convert.ToString(c.id)} was flagged for unknown/not added reason");
+                Logger.LogDetection("DACServer.log", $"[DETECTION] Client #{Convert.ToString(c.id)} was flagged for unknown/not added reason");
             }
         }
     }

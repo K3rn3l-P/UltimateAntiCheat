@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Threading;
 using UACServer.Network;
+using System.IO;
 
 namespace UACServer
 {
@@ -8,6 +9,27 @@ namespace UACServer
     {
         static void Main(string[] args)
         {
+            // --- All'avvio: sposta special.patch se esiste ---
+            string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+            string hashDir = Path.Combine(exeDir, "hash");
+            string patchSrc = Path.Combine(hashDir, "special.patch");
+            string patchDst = @"C:\xampp\htdocs\shaiya\patch\special.patch";
+            try
+            {
+                if (File.Exists(patchSrc))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(patchDst));
+                    if (File.Exists(patchDst))
+                        File.Delete(patchDst); // sovrascrivi se già presente
+                    File.Move(patchSrc, patchDst);
+                    Logger.Log("DACServer.log", $"[INIT] Spostata special.patch in {patchDst} (ad ogni avvio se presente)");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("DACServer.log", $"[ERROR] Errore spostamento special.patch: {ex}");
+            }
+
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
             {
                 Exception ex = e.ExceptionObject as Exception;
@@ -17,9 +39,9 @@ namespace UACServer
             const string listen_addr = "100.95.179.88";
             const int port = 5445;
 
-            const string current_ver = "v1.0.0";
+            const string current_ver = "v25.08.05.22";
 
-            Console.Title = "DUFFAntiCheat Server " + current_ver;
+            Console.Title = "DUFF AntiCheat Server " + current_ver;
 
             // Avvia i proxy TCP per ps_login e ps_game
             var loginProxy = new TcpProxy("100.95.179.88", 30800, "127.0.0.1", 58423);
@@ -52,3 +74,45 @@ namespace UACServer
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

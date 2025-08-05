@@ -3,6 +3,7 @@
 // Used by UltimateAnticheat.rc
 
 #define IDR_SPLASH_IMAGE 101
+#define IDI_MAIN_ICON 100
 
 // Next default values for new objects
 // 

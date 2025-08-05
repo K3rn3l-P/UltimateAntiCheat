@@ -1,20 +1,21 @@
-@echo off
-REM Script per creare una Special patch .patch con 7-Zip secondo specifiche Duff
-REM Il nome della patch è fisso: special.patch
+# 1. Prepara le variabili
+$hashSource = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\bin\Release\hash"
+$patchSpecialDir = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\script\Duff-tool\patch\special"
+$duffToolDir = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\script\Duff-tool"
+$patchFile = "$duffToolDir\patch\special.patch"
+$destPatchFile = "$hashSource\special.patch"
 
-set PATCHFILE=special.patch
+# 2. Assicurati che la cartella di destinazione esista e sia vuota
+if (Test-Path $patchSpecialDir) { Remove-Item "$patchSpecialDir\*" -Recurse -Force }
+else { New-Item -ItemType Directory -Path $patchSpecialDir | Out-Null }
 
-REM Elimina la patch se esiste già
-if exist "%PATCHFILE%" (
-    del /f /q "%PATCHFILE%"
-    echo Patch precedente "%PATCHFILE%" eliminata.
-)
+# 3. Copia i file hash nella cartella patch/special
+Copy-Item "$hashSource\*" $patchSpecialDir -Recurse -Force
 
-REM Escludi questo script e Updater.exe dal pacchetto
-"C:\Program Files\7-Zip\7z.exe" a "%PATCHFILE%" .\* -tzip -mx=9 -mm=Deflate -mmt=on -r -y -x!crea_special_patch.bat -x!Updater.exe
+# 4. Esegui il comando Duff-Tool.exe patch special
+Push-Location $duffToolDir
+& .\Duff-Tool.exe patch special
+Pop-Location
 
-if %errorlevel% equ 0 (
-    echo Patch Special creata con successo: %PATCHFILE%
-) else (
-    echo Errore nella creazione della Special patch!
-)
+# 5. Copia la patch generata nella cartella hash di bin\Release
+Copy-Item $patchFile $destPatchFile -Force

@@ -21,6 +21,8 @@ public class TcpProxy
     public static readonly ConcurrentDictionary<string, DateTime> ExternalIllegalTimestamps = new ConcurrentDictionary<string, DateTime>();
     public static readonly TimeSpan ExternalIllegalResetInterval = TimeSpan.FromHours(12);
 
+    private const int GracePeriodMs = 7000; // 7 secondi di tolleranza per disconnessioni temporanee
+
     public static void BanIpAndUserUid(string clientIp, string reason)
     {
         DatabaseLogger.BanAccountsByIp(clientIp, reason);
@@ -42,8 +44,24 @@ public class TcpProxy
             foreach (var client in bag)
             {
                 try { client.Close(); } catch { }
-                Logger.Log("DACServer.log", $"[PROXY] Connessione chiusa per IP bannato: {ip}");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][PROXY] Connessione chiusa per IP bannato: {ip}");
             }
+        }
+    }
+
+    // Rimuove un TcpClient dal bag associato all'IP
+    private static void RemoveClientFromBag(string ip, TcpClient client)
+    {
+        if (ActiveTcpClients.TryGetValue(ip, out var bag))
+        {
+            // ConcurrentBag non supporta Remove, quindi ricrea il bag senza il client chiuso
+            var newBag = new ConcurrentBag<TcpClient>();
+            foreach (var c in bag)
+            {
+                if (!object.ReferenceEquals(c, client))
+                    newBag.Add(c);
+            }
+            ActiveTcpClients[ip] = newBag;
         }
     }
 
@@ -64,7 +82,7 @@ public class TcpProxy
     {
         var listener = new TcpListener(IPAddress.Parse(listenIp), listenPort);
         listener.Start();
-        Logger.Log("DACServer.log", $"[PROXY] Listening on {listenIp}:{listenPort}, forwarding to {targetHost}:{targetPort}");
+        Logger.LogProxy("DACServer.log", $"[PROXY] Listening on {listenIp}:{listenPort}, forwarding to {targetHost}:{targetPort}");
 
         while (true)
         {
@@ -73,7 +91,7 @@ public class TcpProxy
             // BLOCCO IMMEDIATO: se l'IP è bannato, chiudi subito la connessione senza nemmeno avviare HandleClient
             if (DatabaseLogger.IsIpBanned(clientIp))
             {
-                Logger.Log("DACServer.log", $"[PROXY][BLOCKED] Connessione rifiutata subito: IP {clientIp} bannato (Status = -5)");
+                Logger.LogDetection("DACServer.log", $"[SECURITY][PROXY][BLOCKED] Connessione rifiutata subito: IP {clientIp} bannato (Status = -5)");
                 DatabaseLogger.LogDetection(
                     0,
                     "ProxyBlockedBanned",
@@ -88,7 +106,7 @@ public class TcpProxy
                 client.Dispose();
                 continue;
             }
-            Logger.Log("DACServer.log", $"[PROXY] Accepted connection from {client.Client.RemoteEndPoint}");
+            Logger.LogProxy("DACServer.log", $"[PROXY] Accepted connection from {client.Client.RemoteEndPoint}");
             ThreadPool.QueueUserWorkItem(_ => HandleClient(client));
         }
     }
@@ -100,7 +118,7 @@ public class TcpProxy
         // BLOCCO IMMEDIATO: se l'IP è bannato, chiudi subito la connessione
         if (DatabaseLogger.IsIpBanned(clientIp))
         {
-            Logger.Log("DACServer.log", $"[PROXY][BLOCKED] Connessione rifiutata: IP {clientIp} bannato (Status = -5)");
+            Logger.LogDetection("DACServer.log", $"[SECURITY][PROXY][BLOCKED] Connessione rifiutata: IP {clientIp} bannato (Status = -5)");
             DatabaseLogger.LogDetection(
                 0,
                 "ProxyBlockedBanned",
@@ -113,6 +131,7 @@ public class TcpProxy
             );
             client.Close();
             client.Dispose(); // chiusura definitiva
+            RemoveClientFromBag(clientIp, client);
             return;
         }
 
@@ -130,7 +149,7 @@ public class TcpProxy
             if (!DatabaseLogger.IsIpBanned(clientIp))
             {
                 FailedAttempts.TryRemove(clientIp, out _);
-                Logger.Log("DACServer.log", $"[PROXY] Reset dei tentativi falliti per {clientIp} (IP sbloccato nel database)");
+                Logger.LogProxy("DACServer.log", $"[PROXY] Reset dei tentativi falliti per {clientIp} (IP sbloccato nel database)");
             }
             wasBanned = true;
         }
@@ -138,9 +157,9 @@ public class TcpProxy
         if (DatabaseLogger.IsIpBanned(clientIp) || (userUid.HasValue && DatabaseLogger.IsUserUidBanned(userUid.Value)))
         {
             string reason = userUid.HasValue
-                ? $"[PROXY][BLOCKED] Connessione rifiutata: UserUID {userUid.Value} bannato (Users_Bann o Status = -5)"
-                : $"[PROXY][BLOCKED] Connessione rifiutata: IP {clientIp} bannato (Status = -5)";
-            Logger.Log("DACServer.log", reason);
+                ? $"[SECURITY][PROXY][BLOCKED] Connessione rifiutata: UserUID {userUid.Value} bannato (Users_Bann o Status = -5)"
+                : $"[SECURITY][PROXY][BLOCKED] Connessione rifiutata: IP {clientIp} bannato (Status = -5)";
+            Logger.LogDetection("DACServer.log", reason);
             DatabaseLogger.LogDetection(
                 userUid ?? 0,
                 "ProxyBlockedBanned",
@@ -152,31 +171,36 @@ public class TcpProxy
                 null
             );
             client.Close();
+            RemoveClientFromBag(clientIp, client);
             return;
         }
 
-        Logger.Log("DACServer.log", $"[PROXY] Verifying client {clientIp}");
+        Logger.LogProxy("DACServer.log", $"[PROXY] Verifying client {clientIp}");
 
-        int maxAttempts = 3; // DICHIARA QUI maxAttempts
-
-        string expectedGamecode = null;
+        int maxAttempts = 3;
+        List<UACServer.Network.SessionInfo> sessionList = null;
         bool isAuthenticated = false;
         for (int i = 0; i < maxAttempts; i++)
         {
-            if (AnticheatServer.AuthenticatedSessions.TryGetValue(clientIp, out expectedGamecode))
+            if (UACServer.Network.AnticheatServer.AuthenticatedSessions.TryGetValue(clientIp, out sessionList))
             {
-                isAuthenticated = true;
-                break;
+                // Cerca una sessione che abbia hardwareId/mac/gameCode/clientId diversi (max 2)
+                if (sessionList != null && sessionList.Count <= 2)
+                {
+                    isAuthenticated = true;
+                    break;
+                }
             }
             Thread.Sleep(500);
         }
-
+        // Usa la prima sessione per la chiave di connessione (se esiste)
+        string expectedGamecode = sessionList != null && sessionList.Count > 0 ? sessionList[0].GameCode : null;
         string connectionKey = $"{listenPort}:{clientIp}:{expectedGamecode}";
 
         bool added = ActiveConnections.TryAdd(connectionKey, null);
         if (!added)
         {
-            Logger.Log("DACServer.log", $"[PROXY][BLOCKED] Connessione parallela già attiva per {connectionKey}");
+            Logger.LogDetection("DACServer.log", $"[SECURITY][PROXY][BLOCKED] Connessione parallela già attiva per {connectionKey}");
             DatabaseLogger.LogDetection(
                 0,
                 "ProxyBlockedParallel",
@@ -189,16 +213,17 @@ public class TcpProxy
             );
             client.Close();
             ActiveConnections.TryRemove(connectionKey, out _);
+            RemoveClientFromBag(clientIp, client);
             return;
         }
 
         if (!isAuthenticated)
         {
-            Logger.Log("DACServer.log", $"[PROXY][BLOCKED] Client non autenticato: {clientIp}");
+            Logger.LogDetection("DACServer.log", $"[SECURITY][PROXY][BLOCKED] Client non autenticato o limite sessioni raggiunto: {clientIp}");
             DatabaseLogger.LogDetection(
                 0,
                 "ProxyBlockedUnauth",
-                $"[PROXY][BLOCKED] Client non autenticato: {clientIp}",
+                $"[PROXY][BLOCKED] Client non autenticato o limite sessioni raggiunto: {clientIp}",
                 null,
                 null,
                 clientIp,
@@ -207,6 +232,7 @@ public class TcpProxy
             );
             client.Close();
             ActiveConnections.TryRemove(connectionKey, out _);
+            RemoveClientFromBag(clientIp, client);
 
             // Incrementa i tentativi falliti
             int failed = FailedAttempts.AddOrUpdate(clientIp, 1, (key, old) => old + 1);
@@ -225,7 +251,7 @@ public class TcpProxy
             UACServer.Network.DatabaseLogger.UpdateLoginAttemptIpByRealIp(clientIp);
         }
 
-        Logger.Log("DACServer.log", $"[PROXY] Client {clientIp} authenticated successfully.");
+        Logger.LogProxy("DACServer.log", $"[PROXY] Client {clientIp} authenticated successfully.");
 
         // --- AVVIA IL THREAD DI CONTROLLO PERIODICO BAN IP ---
         Thread banCheckThread = new Thread(() =>
@@ -237,7 +263,7 @@ public class TcpProxy
                     Thread.Sleep(TimeSpan.FromMinutes(20));
                     if (DatabaseLogger.IsIpBanned(clientIp))
                     {
-                        Logger.Log("DACServer.log", $"[PROXY][PERIODIC BLOCK] IP {clientIp} bannato durante la sessione. Chiudo la connessione.");
+                        Logger.LogDetection("DACServer.log", $"[SECURITY][PROXY][PERIODIC BLOCK] IP {clientIp} bannato durante la sessione. Chiudo la connessione.");
                         DatabaseLogger.LogDetection(
                             0,
                             "ProxyPeriodicBlockedBanned",
@@ -264,15 +290,41 @@ public class TcpProxy
             try
             {
                 server.Connect(targetHost, targetPort);
-                Logger.Log("DACServer.log", $"[PROXY] Connected to target {targetHost}:{targetPort}");
+                Logger.LogProxy("DACServer.log", $"[PROXY] Connected to target {targetHost}:{targetPort}");
 
-                var clientToServer = new Thread(() => Forward(client.GetStream(), server.GetStream()));
-                var serverToClient = new Thread(() => Forward(server.GetStream(), client.GetStream()));
+                // Forwarding con monitoraggio e grace period
+                var cts = new CancellationTokenSource();
+                Exception forwardException = null;
+
+                Thread clientToServer = new Thread(() =>
+                {
+                    try { ForwardWithGrace(client.GetStream(), server.GetStream(), cts.Token); }
+                    catch (Exception ex) { forwardException = ex; }
+                    finally { cts.Cancel(); }
+                });
+                Thread serverToClient = new Thread(() =>
+                {
+                    try { ForwardWithGrace(server.GetStream(), client.GetStream(), cts.Token); }
+                    catch (Exception ex) { forwardException = ex; }
+                    finally { cts.Cancel(); }
+                });
                 clientToServer.Start();
                 serverToClient.Start();
 
-                clientToServer.Join();
-                serverToClient.Join();
+                // Attendi che uno dei due thread termini
+                while (clientToServer.IsAlive || serverToClient.IsAlive)
+                {
+                    if (cts.IsCancellationRequested)
+                        break;
+                    Thread.Sleep(100);
+                }
+
+                // Grace period: attendi qualche secondo prima di chiudere tutto
+                Logger.LogProxy("DACServer.log", $"[PROXY] Grace period di {GracePeriodMs / 1000} secondi prima di chiudere le connessioni per {clientIp}");
+                Thread.Sleep(GracePeriodMs);
+
+                try { client.Close(); } catch { }
+                try { server.Close(); } catch { }
             }
             catch (Exception ex)
             {
@@ -281,7 +333,32 @@ public class TcpProxy
             finally
             {
                 ActiveConnections.TryRemove(connectionKey, out _);
+                RemoveClientFromBag(clientIp, client);
             }
+        }
+    }
+
+    // Nuova funzione di forwarding con monitoraggio
+    private void ForwardWithGrace(NetworkStream from, NetworkStream to, CancellationToken token)
+    {
+        try
+        {
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while (!token.IsCancellationRequested && (bytesRead = from.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                to.Write(buffer, 0, bytesRead);
+                to.Flush();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (ex.Message.Contains("WSACancelBlockingCall"))
+                Logger.LogForward("DACServer.log", "[PROXY][FORWARD][INFO] Stream TCP chiuso per cambio porta login/Game (WSACancelBlockingCall): la sessione applicativa potrebbe essere ancora attiva.");
+            else if (ex.Message.Contains("forcibly closed by the remote host"))
+                Logger.LogForward("DACServer.log", "[PROXY][FORWARD][INFO] Connessione chiusa dal client.");
+            else
+                Logger.LogForward("DACServer.log", $"[PROXY][FORWARD][ERROR] Connessione chiusa o errore: {ex.Message}");
         }
     }
 

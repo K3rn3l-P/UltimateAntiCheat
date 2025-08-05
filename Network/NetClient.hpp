@@ -98,6 +98,7 @@ public:
 
 	bool HandshakeCompleted = false;
 	bool Initialized = false;
+	bool GracefulDisconnect = false; // Indica se la disconnessione è volontaria
 
 	SOCKET GetClientSocket() const { return this->Socket; }
 	string GetConnectedIP() const { return this->Ip; }

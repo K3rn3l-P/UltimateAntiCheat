@@ -1,41 +1,46 @@
-$ErrorActionPreference = "Stop"
-trap { Write-Host "ERRORE: $($_.Exception.Message)"; exit 1 }
+# 1. Prepara le variabili
+$hashSource = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\UltimateAntiCheat-Server\bin\Release\hash"
+$patchSpecialDir = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\script\Duff-tool\patch\special"
+$duffToolDir = "C:\Users\lol1\Documents\A-Best-Installation-GUIDE\100.Code-Project\UltimateAntiCheat\script\Duff-tool"
+$patchFile = "$duffToolDir\patch\special.patch"
+$destPatchFile = "$hashSource\special.patch"
 
-$hashDir = Join-Path $PSScriptRoot "..\UltimateAntiCheat-Server\bin\Release\hash"
-$patchFile = Join-Path $hashDir "special.patch"
-$sevenZip = "C:\Program Files\7-Zip\7z.exe"
+# 2. Assicurati che la cartella di destinazione esista e sia vuota
+if (Test-Path $patchSpecialDir) { Remove-Item "$patchSpecialDir\*" -Recurse -Force }
+else { New-Item -ItemType Directory -Path $patchSpecialDir | Out-Null }
 
-if (!(Test-Path $sevenZip)) {
-    Write-Host "ERRORE: 7-Zip non trovato in $sevenZip"
+# 3. Copia SOLO i file richiesti nella cartella patch/special, blocca la build se mancano
+$requiredFiles = @("duff.dll", "game.exe", "x32.exe")
+$missing = @()
+foreach ($file in $requiredFiles) {
+    $src = Join-Path $hashSource $file
+    if (Test-Path $src) {
+        Copy-Item $src $patchSpecialDir -Force
+    } else {
+        $missing += $file
+    }
+}
+if ($missing.Count -gt 0) {
+    $missingList = $missing -join ', '
+    Write-Error ('I seguenti file richiesti non sono stati trovati in ' + $hashSource + ': ' + $missingList)
     exit 1
 }
-if (!(Test-Path $hashDir)) {
-    Write-Host "ERRORE: Cartella hash non trovata: $hashDir"
-    exit 1
+
+# 4. Esegui il comando DuffToolCli.exe patch special
+Push-Location $duffToolDir
+& .\DuffToolCli.exe patch special
+$exitCode = $LASTEXITCODE
+Pop-Location
+
+if ($exitCode -ne 0) {
+    Write-Error ('DuffToolCli.exe patch special ha restituito un errore (' + $exitCode + ').')
+    exit $exitCode
 }
 
-# Escludi sia Updater.exe che special.patch dalla lista dei file da includere
-$files = Get-ChildItem -Path $hashDir -File | Where-Object { $_.Name -ne "Updater.exe" -and $_.Name -ne "special.patch" }
-if ($files.Count -eq 0) {
-    Write-Host "ERRORE: Nessun file da includere nella patch."
-    exit 1
-}
-
-Write-Host "File inclusi nella patch:"
-$files | ForEach-Object { Write-Host " - $($_.Name)" }
-
-# Cancella la patch precedente se esiste
+# 5. Copia la patch generata nella cartella hash di bin\Release
 if (Test-Path $patchFile) {
-    Remove-Item $patchFile -Force
-    Write-Host "Patch precedente '$patchFile' eliminata."
-}
-
-# Crea la patch
-& "$sevenZip" a "$patchFile" $($files | ForEach-Object { "`"$($_.FullName)`"" }) -tzip -mx=9 -mm=Deflate -mmt=on -y
-
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "Patch Special creata con successo: $patchFile"
+    Copy-Item $patchFile $destPatchFile -Force
 } else {
-    Write-Host "ERRORE: Errore nella creazione della Special patch!"
+    Write-Error ('La patch non è stata generata: ' + $patchFile + ' non trovato.')
     exit 1
 }

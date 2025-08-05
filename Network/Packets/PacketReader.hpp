@@ -12,6 +12,8 @@ public:
     PacketReader(unsigned char* buffer, size_t bufferSize)
         : buffer(buffer), bufferSize(bufferSize), position(0) {}
 
+    size_t getRemainingBytes() const { return bufferSize - position; }
+
     bool readBool() 
     {
         return read<char>() != 0;

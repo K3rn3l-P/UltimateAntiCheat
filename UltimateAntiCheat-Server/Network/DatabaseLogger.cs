@@ -34,7 +34,7 @@ namespace UACServer.Network
 
         public static void LogClientInfo(string hostname, string gameCode, int clientId, string ip, string mac, string hardwareId, string message)
         {
-            Logger.Log("DACServer.log", $"[DB] LogClientInfo START: clientId={clientId}, hostname={hostname}, gameCode={gameCode}, ip={ip}, mac={mac}, hardwareId={hardwareId}, message={message}");
+            Logger.LogDatabase("DACServer.log", $"[DB] LogClientInfo START: clientId={clientId}, hostname={hostname}, gameCode={gameCode}, ip={ip}, mac={mac}, hardwareId={hardwareId}, message={message}");
             try
             {
                 using (var conn = new SqlConnection(connectionString))
@@ -51,11 +51,11 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@Message", (object)message ?? DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", "[DB] LogClientInfo SUCCESS");
+                Logger.LogDatabase("DACServer.log", "[DB] LogClientInfo SUCCESS");
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] LogClientInfo exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] LogClientInfo exception: " + ex.ToString());
             }
         }
 
@@ -69,7 +69,7 @@ namespace UACServer.Network
     string mac = null,
     string hardwareId = null)
         {
-            Logger.Log("DACServer.log", $"[DB] LogDetection START: clientId={clientId}, detectionType={detectionType}, details={details}, hostname={hostname}, gameCode={gameCode}, ip={ip}, mac={mac}, hardwareId={hardwareId}");
+            Logger.LogDatabase("DACServer.log", $"[DB] LogDetection START: clientId={clientId}, detectionType={detectionType}, details={details}, hostname={hostname}, gameCode={gameCode}, ip={ip}, mac={mac}, hardwareId={hardwareId}");
             try
             {
                 using (var conn = new SqlConnection(connectionString))
@@ -87,18 +87,18 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@Message", $"[DETECTION] {detectionType}: {details}");
                     cmd.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", "[DB] LogDetection SUCCESS");
+                Logger.LogDatabase("DACServer.log", "[DB] LogDetection SUCCESS");
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] LogDetection exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] LogDetection exception: " + ex.ToString());
             }
         }
 
 
         public static void LogLoginEvent(int clientId, string username, DateTime loginTime, string ip)
         {
-            Logger.Log("DACServer.log", $"[DB] LogLoginEvent START: clientId={clientId}, username={username}, loginTime={loginTime}, ip={ip}");
+            Logger.LogDatabase("DACServer.log", $"[DB] LogLoginEvent START: clientId={clientId}, username={username}, loginTime={loginTime}, ip={ip}");
             try
             {
                 using (var conn = new SqlConnection(connectionString))
@@ -112,17 +112,17 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@IP", (object)ip ?? DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", "[DB] LogLoginEvent SUCCESS");
+                Logger.LogDatabase("DACServer.log", "[DB] LogLoginEvent SUCCESS");
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] LogLoginEvent exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] LogLoginEvent exception: " + ex.ToString());
             }
         }
 
         public static void LogLogoutEvent(int clientId, DateTime logoutTime)
         {
-            Logger.Log("DACServer.log", $"[DB] LogLogoutEvent START: clientId={clientId}, logoutTime={logoutTime}");
+            Logger.LogDatabase("DACServer.log", $"[DB] LogLogoutEvent START: clientId={clientId}, logoutTime={logoutTime}");
             try
             {
                 using (var conn = new SqlConnection(connectionString))
@@ -134,17 +134,17 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@LogoutTime", logoutTime);
                     cmd.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", "[DB] LogLogoutEvent SUCCESS");
+                Logger.LogDatabase("DACServer.log", "[DB] LogLogoutEvent SUCCESS");
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] LogLogoutEvent exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] LogLogoutEvent exception: " + ex.ToString());
             }
         }
 
         public static void LogEvent(int clientId, string eventType, string eventData)
         {
-            Logger.Log("DACServer.log", $"[DB] LogEvent START: clientId={clientId}, eventType={eventType}, eventData={eventData}");
+            Logger.LogDatabase("DACServer.log", $"[DB] LogEvent START: clientId={clientId}, eventType={eventType}, eventData={eventData}");
             try
             {
                 using (var conn = new SqlConnection(connectionString))
@@ -157,11 +157,11 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@EventData", (object)eventData ?? DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", "[DB] LogEvent SUCCESS");
+                Logger.LogDatabase("DACServer.log", "[DB] LogEvent SUCCESS");
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] LogEvent exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] LogEvent exception: " + ex.ToString());
             }
         }
 
@@ -195,14 +195,14 @@ namespace UACServer.Network
                         {
                             kickCmd.Parameters.AddWithValue("@KickCmd", $"/kickuid {userUid}");
                             kickCmd.ExecuteNonQuery();
-                            Logger.Log("DACServer.log", $"[DB] KickAllUsersByIp: Kicked UserUID {userUid} for IP {ip}");
+                            Logger.LogDatabase("DACServer.log", $"[DB] KickAllUsersByIp: Kicked UserUID {userUid} for IP {ip}");
                         }
                     }
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] KickAllUsersByIp exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] KickAllUsersByIp exception: " + ex.ToString());
             }
         }
 
@@ -228,7 +228,7 @@ namespace UACServer.Network
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] GetAllUserUidsByIp exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] GetAllUserUidsByIp exception: " + ex.ToString());
             }
             return result;
         }
@@ -245,7 +245,7 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@IP", ip);
                     cmd.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", $"[DB] BanAccountsByIp: Banned all accounts with IP {ip}");
+                Logger.LogDatabase("DACServer.log", $"[DB] BanAccountsByIp: Banned all accounts with IP {ip}");
                 // Kick all users with this IP
                 KickAllUsersByIp(ip, reason);
                 // Log il ban per tutti gli UserUID
@@ -266,7 +266,7 @@ namespace UACServer.Network
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] BanAccountsByIp exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] BanAccountsByIp exception: " + ex.ToString());
             }
         }
 
@@ -288,7 +288,7 @@ namespace UACServer.Network
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] GetUserUidByIp exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] GetUserUidByIp exception: " + ex.ToString());
                 return null;
             }
         }
@@ -308,7 +308,7 @@ namespace UACServer.Network
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] IsUserUidBanned exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] IsUserUidBanned exception: " + ex.ToString());
                 return false;
             }
         }
@@ -335,11 +335,11 @@ namespace UACServer.Network
                     cmdKick.Parameters.AddWithValue("@KickCmd", $"/kickuid {userUid}");
                     cmdKick.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", $"[DB] BanUserUid: UserUID {userUid} banned in Users_Bann and kicked.");
+                Logger.LogDatabase("DACServer.log", $"[DB] BanUserUid: UserUID {userUid} banned in Users_Bann and kicked.");
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] BanUserUid exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] BanUserUid exception: " + ex.ToString());
             }
         }
 
@@ -362,11 +362,11 @@ namespace UACServer.Network
                     cmd.Parameters.AddWithValue("@Message", (object)message ?? DBNull.Value);
                     cmd.ExecuteNonQuery();
                 }
-                Logger.Log("DACServer.log", $"[DB] LogIpBlocked: IP {ip} blocked and logged.");
+                Logger.LogDatabase("DACServer.log", $"[DB] LogIpBlocked: IP {ip} blocked and logged.");
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] LogIpBlocked exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] LogIpBlocked exception: " + ex.ToString());
             }
         }
         public static void CleanupOldLogs(int days = 1)
@@ -408,13 +408,13 @@ namespace UACServer.Network
                     int rows5 = cmd5.ExecuteNonQuery();
 
                     string logMsg = $"[DB] CleanupOldLogs: Deleted {rows1} from gameLog, {rows2} from LogoutEvents, {rows3} from LoginEvents, {rows4} from EventLog, {rows5} from IPBlocked.";
-                    Logger.Log("DACServer.log", logMsg);
+                    Logger.LogDatabase("DACServer.log", logMsg);
                     Console.WriteLine(logMsg);
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] CleanupOldLogs exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] CleanupOldLogs exception: " + ex.ToString());
                 Console.WriteLine("[DB][ERROR] CleanupOldLogs exception: " + ex.ToString());
             }
         }
@@ -433,7 +433,7 @@ namespace UACServer.Network
                     var userIdObj = cmdUser.ExecuteScalar();
                     if (userIdObj == null || userIdObj == DBNull.Value)
                     {
-                        Logger.Log("DACServer.log", $"[DB][INFO] Nessun UserID trovato in Users_Master per IP {realIp}, nessun update LoginAttempts.");
+                        Logger.LogDatabase("DACServer.log", $"[DB][INFO] Nessun UserID trovato in Users_Master per IP {realIp}, nessun update LoginAttempts.");
                         return;
                     }
                     string userId = userIdObj.ToString();
@@ -452,12 +452,12 @@ namespace UACServer.Network
                     cmdUpdate.Parameters.AddWithValue("@RealIP", realIp);
                     int rows = cmdUpdate.ExecuteNonQuery();
 
-                    Logger.Log("DACServer.log", $"[DB] UpdateLoginAttemptIpByRealIp: Aggiornato {rows} record per UserID={userId} con IP reale {realIp}");
+                    Logger.LogDatabase("DACServer.log", $"[DB] UpdateLoginAttemptIpByRealIp: Aggiornato {rows} record per UserID={userId} con IP reale {realIp}");
                 }
             }
             catch (Exception ex)
             {
-                Logger.Log("DACServer.log", "[DB][ERROR] UpdateLoginAttemptIpByRealIp exception: " + ex.ToString());
+                Logger.LogDatabase("DACServer.log", "[DB][ERROR] UpdateLoginAttemptIpByRealIp exception: " + ex.ToString());
             }
         }
     }

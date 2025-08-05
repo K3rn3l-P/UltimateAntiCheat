@@ -6,9 +6,28 @@
 #include <wincrypt.h>
 #include <thread>
 #include <chrono>
+#include <shellapi.h>
 #pragma comment(lib, "bcrypt.lib")
 #include "../Common/SHA256Utils.hpp" // o il path corretto
 
+// Funzione helper per mostrare una notifica di sistema e chiudere il client
+void ShowSystemNotificationAndExit(const std::wstring& message, const std::wstring& title = L"Duff AntiCheat")
+{
+    // Usa una notifica balloon tramite tray icon temporanea
+    NOTIFYICONDATA nid = { 0 };
+    nid.cbSize = sizeof(NOTIFYICONDATA);
+    nid.hWnd = NULL;
+    nid.uID = 1;
+    nid.uFlags = NIF_INFO;
+    wcscpy_s(nid.szInfo, message.c_str());
+    wcscpy_s(nid.szInfoTitle, title.c_str());
+    nid.dwInfoFlags = NIIF_ERROR;
+    Shell_NotifyIcon(NIM_ADD, &nid);
+    Shell_NotifyIcon(NIM_MODIFY, &nid);
+    Sleep(3500); // Mostra la notifica per 3.5 secondi
+    Shell_NotifyIcon(NIM_DELETE, &nid);
+    ExitProcess(1);
+}
 
 /*
 	Initialize - Initializes the network client
@@ -99,6 +118,7 @@ Error NetClient::Initialize(__in const std::string ip, __in const uint16_t port,
 */
 Error NetClient::EndConnection(__in const int reason)
 {
+	GracefulDisconnect = true; // Segna la disconnessione come volontaria
 	PacketWriter* p = Packets::Builder::ClientGoodbye(reason);
 	Error err = Error::OK;
 
@@ -176,6 +196,7 @@ void NetClient::ProcessRequests(__in LPVOID Param)
 	if (Param == nullptr)
 	{
 		Logger::logf(Info, "NetClient class pointer was nullptr @ ProcessRequests");
+		ShowSystemNotificationAndExit(L"Network error: client pointer was null. If this problem persists, contact support.");
 		return;
 	}
 
@@ -190,6 +211,7 @@ void NetClient::ProcessRequests(__in LPVOID Param)
 	if (Client == nullptr)
 	{
 		Logger::logf(Err, "Client was NULL @ NetClient::ProcessRequests");
+		ShowSystemNotificationAndExit(L"Network error: client pointer was null. If this problem persists, contact support.");
 		receiving = false; //todo: send signals to rest of anticheat to shutdown
 		goto end;
 	}
@@ -210,23 +232,36 @@ void NetClient::ProcessRequests(__in LPVOID Param)
 			}
 
 			if (bytesIn == 0)
-				continue;
+			{
+				// Connessione chiusa dal server senza messaggio esplicito
+				Logger::logf(Err, "Connection closed by server (bytesIn == 0)");
+				if (!Client->GracefulDisconnect) // Mostra il messaggio solo se NON è una disconnessione volontaria
+					ShowSystemNotificationAndExit(L"Connection closed by server. If this problem persists, contact support.");
+				break;
+			}
 
 			if (bytesIn != SOCKET_ERROR)
 			{
 				Client->CipherData(recvBuf, bytesIn);
-
 
 				PacketReader* p = new PacketReader(recvBuf, bytesIn);
 				Client->HandleInboundPacket(p);
 				delete p;
 			}
 			else
+			{
+				// Errore di socket
+				Logger::logf(Err, "Network error or connection lost (SOCKET_ERROR)");
+				if (!Client->GracefulDisconnect)
+					ShowSystemNotificationAndExit(L"Network error or connection lost. If this problem persists, contact support.");
 				receiving = false;
+			}
 		}
 		else if (s == SOCKET_ERROR)
 		{
-			Logger::logf(Err, "Socket error @  NetClient::ProcessRequests");
+			Logger::logf(Err, "Network error or connection lost (SOCKET_ERROR)");
+			if (!Client->GracefulDisconnect)
+				ShowSystemNotificationAndExit(L"Network error or connection lost. If this problem persists, contact support.");
 			receiving = false;
 		}
 
@@ -364,7 +399,19 @@ Error NetClient::HandleInboundPacket(__in PacketReader* p)
 		}
 	}break;
 
+	case 9999: // Messaggio di errore custom dal server
+	{
+		size_t remaining = p->getRemainingBytes();
+		std::string errorMsg = p->readString(remaining);
+		int wchars_num = MultiByteToWideChar(CP_UTF8, 0, errorMsg.c_str(), -1, NULL, 0);
+		std::wstring werrorMsg(wchars_num, 0);
+		MultiByteToWideChar(CP_UTF8, 0, errorMsg.c_str(), -1, &werrorMsg[0], wchars_num);
+		ShowSystemNotificationAndExit(werrorMsg);
+	}break;
+
 	default:
+		Logger::logf(Err, "Unknown packet opcode received: %d", opcode);
+		ShowSystemNotificationAndExit(L"Protocol error: unknown packet received from server. If this problem persists, contact support.");
 		err = Error::BAD_OPCODE;
 		break;
 	}
@@ -565,7 +612,11 @@ void NetClient::SendErrorAndExit(const std::string& errorMsg)
 	p->WriteString(errorMsg);
 	this->SendData(p);
 	Sleep(100); // Attendi che il pacchetto venga inviato
-	ExitProcess(1);
+	// Mostra sempre anche un messaggio a video
+	int wchars_num = MultiByteToWideChar(CP_UTF8, 0, errorMsg.c_str(), -1, NULL, 0);
+	std::wstring werrorMsg(wchars_num, 0);
+	MultiByteToWideChar(CP_UTF8, 0, errorMsg.c_str(), -1, &werrorMsg[0], wchars_num);
+	ShowSystemNotificationAndExit(werrorMsg);
 }
 
 /*

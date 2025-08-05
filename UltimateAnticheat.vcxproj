@@ -176,8 +176,7 @@ powershell -ExecutionPolicy Bypass -File "$(ProjectDir)script\ExportAndCopyXorKe
       <Message>Copy Splash Image</Message>
     </PostBuildEvent>
     <PreBuildEvent>
-      <Command>
-      </Command>
+      <Command>powershell -ExecutionPolicy Bypass -File "$(ProjectDir)script\update_client_version.ps1"</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

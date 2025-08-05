@@ -233,28 +233,12 @@ int main(int argc, char** argv)
     const bool bUsingDriver = false; //signed driver for hybrid KM + UM anticheat. the KM driver will not be public, so make one yourself if you want to use this option
     const bool bEnableLogging = false; // set to false to not create a detailed AntiCheat log file on the user's system
 
-    constexpr auto parent_1 = OBFUSCATE("explorer.exe"); //in release build we can encrypt any compiled strings and decrypt them at runtime
+    constexpr auto parent_1 = OBFUSCATE("Updater.exe"); //in release build we can encrypt any compiled strings and decrypt them at runtime
     wchar_t decrypted_1[parent_1.getSize()] = {};
     parent_1.decrypt(decrypted_1);
 
-    constexpr auto parent_2 = OBFUSCATE("steam.exe");
-    wchar_t decrypted_2[parent_2.getSize()] = {};
-    parent_2.decrypt(decrypted_2);
-
-    constexpr auto parent_3 = OBFUSCATE("powershell.exe");
-    wchar_t decrypted_3[parent_3.getSize()] = {};
-    parent_3.decrypt(decrypted_3);
-
-    constexpr auto parent_4 = OBFUSCATE("x32.exe");
-    wchar_t decrypted_4[parent_4.getSize()] = {};
-    parent_4.decrypt(decrypted_4);
-
-    constexpr auto parent_5 = OBFUSCATE("Updater.exe");
-    wchar_t decrypted_5[parent_5.getSize()] = {};
-    parent_5.decrypt(decrypted_5);
-
-    const std::list<std::wstring> allowedParents = { decrypted_1, decrypted_2, decrypted_3, decrypted_4, decrypted_5 }; //add your launcher here
-	const std::string logFileName = ""; //empty : does not log to file (game.log), otherwise logs to file with this name
+    const std::list<std::wstring> allowedParents = { decrypted_1 }; //add your launcher here
+	const std::string logFileName = "game.log"; //empty : does not log to file (game.log), otherwise logs to file with this name
 #endif
 
 #ifdef _DEBUG
@@ -364,8 +348,9 @@ int main(int argc, char** argv)
         }
     }
     if (!isAllowed) {
-        Logger::logf(Err, "Parent process '%ws' was not whitelisted, shutting down program!", parentProcessName.c_str());
-        return 1;
+        std::wcerr << L"[ERRORE] Il client può essere avviato solo tramite il launcher Updater.exe! (Parent: '" << parentProcessName << L"')" << std::endl;
+        Logger::logf(Err, "Parent process '%ws' was not whitelisted (expected Updater.exe), shutting down program!", parentProcessName.c_str());
+        ExitProcess(1);
     }
 
     // ABILITATO SOLO per test ed errori parental per l'updater.. SOLO TEST (ANCHE IN Detections/API.cpp)
