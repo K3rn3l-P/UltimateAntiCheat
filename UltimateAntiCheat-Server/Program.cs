@@ -39,7 +39,7 @@ namespace UACServer
             const string listen_addr = "100.95.179.88";
             const int port = 5445;
 
-            const string current_ver = "v25.08.05.22";
+            const string current_ver = "v25.08.08.16";
 
             Console.Title = "DUFF AntiCheat Server " + current_ver;
 
@@ -74,6 +74,8 @@ namespace UACServer
         }
     }
 }
+
+
 
 
 
