@@ -50,6 +50,7 @@ that project sits on the server side, and this fork builds that side out.
 | **Keyed transport, both ends** | A shared XOR key applied symmetrically on the C++ client and the C# server, with the key generated out of band rather than compiled in. `Common/XorKey.*`, `Network/XorKey.cs` |
 | **Server-side management** | Process blacklists distributed from the server instead of baked into the binary, detections persisted to SQL, and a TCP proxy in front of the listener. `Network/BlacklistManager.cs`, `Network/DatabaseLogger.cs`, `Network/TcpProxy.cs` |
 | **Client API layer** | A separate surface between the anti-cheat core and its callers, which upstream does not have. `API/API.*` |
+| **Patch distribution** | Client and hash-table updates are built and shipped as signed, hash-verified patches by a standalone tool from a companion project, not maintained here. `script/Duff-tool/` — source in [shaiya-updater](https://github.com/K3rn3l-P/shaiya-updater) (`Updater.Tool`/`DuffToolCli`). |
 
 Beyond those, most of the client was reworked: of 208 files, 27 are still identical to upstream.
 
