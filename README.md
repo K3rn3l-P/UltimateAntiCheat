@@ -19,6 +19,26 @@ design are AlSch092's work. Everything listed under *What this adds* is mine, bu
 
 Licensed **AGPL-3.0**, same as upstream. The original `LICENSE` and copyright are unchanged.
 
+## The idea
+
+A client cannot be trusted to judge itself. Whatever checks it runs, a patched client reports that
+everything is fine, and a verdict computed on the attacker's machine is worth nothing. So the split
+here is that the client reports evidence and the server decides what the evidence means.
+
+That single choice is what the rest follows from. The client sends hashes of its own modules rather
+than a pass/fail, and the expected values live on the server, where they can't be read or edited by
+whoever owns the machine. The process blacklist is distributed at runtime instead of compiled in,
+so the client never carries the list of what it's looking for, and the list can change without
+shipping a new build. Detections are persisted rather than only acted on, because the interesting
+signal is usually a pattern across sessions, not a single hit.
+
+The transport is XOR with a shared key, and it's worth being precise about what that is: it raises
+the cost of casually reading or replaying the protocol. It is not confidentiality, and it was never
+meant to be. Anyone determined and local gets the key out of the binary.
+
+None of this makes a usermode anti-cheat unbeatable, which nothing does. It moves the decision to
+the one place the attacker doesn't control.
+
 ## What this adds
 
 Upstream ships a free client with a server that is essentially a stub. The commercial value in
