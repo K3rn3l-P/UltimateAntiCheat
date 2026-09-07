@@ -54,6 +54,12 @@ that project sits on the server side, and this fork builds that side out.
 
 Beyond those, most of the client was reworked: of 208 files, 27 are still identical to upstream.
 
+## Related
+
+Same Shaiya toolchain as
+[PSM_Cmd-SecureCommandChannel](https://github.com/K3rn3l-P/PSM_Cmd-SecureCommandChannel) — same
+author, same period, no code shared between them.
+
 ## State
 
 Built against upstream as of **early August 2025** — the last upstream commit before this fork
